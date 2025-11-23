@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-API Manager - Monitor and display API key quota status
+API Manager - Monitor and manage API key quota
 
-A command-line tool to check remaining quota for SteamDT API keys.
+Manages API key quota tracking, updates, and display.
 """
 
 import sys
@@ -49,6 +49,40 @@ def load_quota(quota_file="api_quota.csv"):
     return quota_cache
 
 
+def save_quota(quota_cache, quota_file="api_quota.csv"):
+    """Save quota information to CSV file"""
+    try:
+        with open(quota_file, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['api_key', 'remaining_quota', 'minute_timestamp'])
+            
+            for api_key, info in quota_cache.items():
+                writer.writerow([api_key, info['remaining_quota'], info['minute_timestamp']])
+    except Exception as e:
+        pass
+
+
+def initialize_all_keys(quota_file="api_quota.csv"):
+    """Initialize quota for all API keys from .env"""
+    api_keys = get_api_keys()
+    if not api_keys:
+        return
+    
+    quota_cache = load_quota(quota_file)
+    current_minute = get_current_minute()
+    rate_limit = 60
+    
+    # Ensure all keys are in the cache
+    for api_key in api_keys:
+        if api_key not in quota_cache:
+            quota_cache[api_key] = {
+                'remaining_quota': rate_limit,
+                'minute_timestamp': current_minute
+            }
+    
+    save_quota(quota_cache, quota_file)
+
+
 def get_api_keys():
     """Get API keys from environment"""
     api_keys_str = os.getenv('API_KEYS', '')
@@ -57,12 +91,44 @@ def get_api_keys():
     return []
 
 
+def get_best_api_key(quota_file="api_quota.csv"):
+    """Get the API key with the most remaining quota"""
+    quota_cache = load_quota(quota_file)
+    api_keys = get_api_keys()
+    current_minute = get_current_minute()
+    rate_limit = 60
+    
+    if not api_keys:
+        return None
+    
+    best_key = None
+    max_quota = -1
+    
+    for api_key in api_keys:
+        if api_key in quota_cache:
+            quota_info = quota_cache[api_key]
+            
+            # If minute doesn't match, quota is restored
+            if quota_info['minute_timestamp'] != current_minute:
+                remaining = rate_limit
+            else:
+                remaining = quota_info['remaining_quota']
+        else:
+            remaining = rate_limit
+        
+        if remaining > max_quota:
+            max_quota = remaining
+            best_key = api_key
+    
+    return best_key if max_quota > 0 else None
+
+
 def display_quota(api_key=None):
     """Display quota for specific API key or all keys"""
     quota_cache = load_quota()
     api_keys = get_api_keys()
     current_minute = get_current_minute()
-    rate_limit = 60  # Default rate limit per minute
+    rate_limit = 60
     
     if not api_keys:
         print("No API keys found")
@@ -106,12 +172,14 @@ def display_quota(api_key=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='API Manager - Monitor API key quota status',
+        description='API Manager - Monitor and manage API key quota',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python utils/api-manager.py
-  python utils/api-manager.py --api-key YOUR_SPECIFIC_KEY
+  python utils/api-manager.py --api-key YOUR_KEY
+  python utils/api-manager.py --init
+  python utils/api-manager.py --best
         """
     )
     
@@ -121,9 +189,30 @@ Examples:
         help='Display quota for specific API key'
     )
     
+    parser.add_argument(
+        '--init',
+        action='store_true',
+        help='Initialize all API keys in quota file'
+    )
+    
+    parser.add_argument(
+        '--best',
+        action='store_true',
+        help='Get the best API key with most quota'
+    )
+    
     args = parser.parse_args()
     
-    display_quota(api_key=args.api_key)
+    if args.init:
+        initialize_all_keys()
+    elif args.best:
+        best_key = get_best_api_key()
+        if best_key:
+            print(best_key)
+        else:
+            sys.exit(1)
+    else:
+        display_quota(api_key=args.api_key)
 
 
 if __name__ == "__main__":

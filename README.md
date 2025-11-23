@@ -2,6 +2,14 @@
 
 CS2 饰品价格追踪工具
 
+## 快速使用
+
+### get_price - 自动获取价格
+```bash
+python get_price.py --hashname "AK-47 | Redline (Field-Tested)"
+```
+自动分配空闲 API key，返回价格数据
+
 ## 工具集
 
 ### ddrager - 数据获取
@@ -34,6 +42,7 @@ pip install -r requirements.txt
 ## 项目结构
 ```
 buff-tracker/
+├── get_price.py         # 自动获取价格
 ├── utils/
 │   ├── ddrager.py       # 数据获取
 │   └── api-manager.py   # 额度管理

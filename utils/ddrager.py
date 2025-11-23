@@ -100,17 +100,27 @@ class SteamDTAPIManager:
     def _save_quota(self):
         """Save quota information to CSV file"""
         try:
+            # Load existing quota data first
+            existing_quota = {}
+            if self.quota_file.exists():
+                with open(self.quota_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        existing_quota[row['api_key']] = {
+                            'remaining_quota': int(row['remaining_quota']),
+                            'minute_timestamp': row['minute_timestamp']
+                        }
+            
+            # Update with current cache
+            existing_quota.update(self.quota_cache)
+            
+            # Write all quota data
             with open(self.quota_file, 'w', encoding='utf-8', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(['api_key', 'remaining_quota', 'minute_timestamp'])
                 
-                for api_key in self.API_KEYS:
-                    if api_key in self.quota_cache:
-                        info = self.quota_cache[api_key]
-                        writer.writerow([api_key, info['remaining_quota'], info['minute_timestamp']])
-                    else:
-                        current_minute = self._get_current_minute()
-                        writer.writerow([api_key, self.RATE_LIMITS["price_single"], current_minute])
+                for api_key, info in existing_quota.items():
+                    writer.writerow([api_key, info['remaining_quota'], info['minute_timestamp']])
         except Exception as e:
             pass
     
