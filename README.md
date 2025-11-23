@@ -7,49 +7,74 @@ hi~各位导🐕中午好!我谨代表导🐕联盟设计出便携获取不同�
 3. 邮箱通知
 4. 实时自动交易
 
-## 快速开始
+## DDrager - 核心数据获取工具
 
-### 1. 安装依赖
+DDrager 是一个轻量级的数据获取核心工具，专注于从 SteamDT API 获取原始价格数据。
+
+### 设计理念
+- ✅ **纯粹的数据获取** - 只返回原始 JSON 数据，不做任何格式化
+- ✅ **简洁的接口** - 仅需两个参数：`--apikey` 和 `--hashname`
+- ✅ **可被调用** - 其他工具可以通过命令行调用 ddrager 获取数据
+- ✅ **轻量级** - 无依赖的核心功能
+
+### 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置API密钥
-创建 `.env` 文件，添加你的SteamDT API密钥:
-```env
-API_KEYS=key1,key2,key3,...
+### 使用方法
+
+**基本用法:**
+```bash
+python ddrager.py --apikey YOUR_API_KEY --hashname "AK-47 | Redline (Field-Tested)"
 ```
 
-### 3. 使用示例
+**输出原始 JSON 数据:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "platform": "BUFF",
+      "sellPrice": 35.0,
+      "sellCount": 19,
+      "biddingPrice": 23.1,
+      ...
+    }
+  ]
+}
+```
+
+### 在其他工具中调用
 
 ```python
-from api_manager import SteamDTAPIManager
+import subprocess
+import json
 
-# 创建管理器
-manager = SteamDTAPIManager()
+# 调用 ddrager 获取数据
+result = subprocess.run(
+    ['python', 'ddrager.py', '--apikey', 'YOUR_KEY', '--hashname', 'AK-47 | Redline (Field-Tested)'],
+    capture_output=True,
+    text=True
+)
 
-# 查询价格
-result = manager.get_price_single("AK-47 | Redline (Field-Tested)")
-print(result)
-
-# 查看额度
-status = manager.get_quota_status()
-for s in status[:5]:
-    print(f"{s['api_key']}: {s['remaining_quota']}/{s['total_quota']}")
+# 解析返回的 JSON 数据
+data = json.loads(result.stdout)
 ```
 
-### 4. 运行测试
 ```bash
-python test.py
+# 在 Shell 中调用
+data=$(python ddrager.py --apikey YOUR_KEY --hashname "AWP | Asiimov (Field-Tested)")
+echo $data | jq .
 ```
 
-## 项目结构
+### 项目结构
 
 ```
 buff-tracker/
-├── api_manager.py      # API管理器
-├── test.py            # 测试脚本
-├── requirements.txt   # 依赖项
-├── .env              # API密钥配置
-└── README.md         # 说明文档
+├── ddrager.py         # 核心数据获取工具
+├── test.py           # 测试脚本
+├── requirements.txt  # 依赖项
+├── .env             # API密钥配置(可选)
+└── README.md        # 说明文档
 ```
