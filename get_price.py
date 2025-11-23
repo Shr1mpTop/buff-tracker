@@ -15,7 +15,7 @@ import subprocess
 def get_best_api_key():
     """Get the API key with the most remaining quota"""
     result = subprocess.run(
-        ['python', 'utils/api-manager.py', '--best'],
+        ['python', 'utils/api-manager.py', '--best', 'price_single'],
         capture_output=True,
         text=True
     )

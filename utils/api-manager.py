@@ -4,6 +4,7 @@
 API Manager - Monitor and manage API key quota
 
 Manages API key quota tracking, updates, and display.
+Supports multiple API endpoints with different rate limits.
 """
 
 import sys
@@ -18,9 +19,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# API endpoint rate limits
+RATE_LIMITS = {
+    "price_single": {
+        "limit": 60,
+        "period": "minute"  # 60 requests per minute
+    },
+    "base": {
+        "limit": 1,
+        "period": "day"  # 1 request per day
+    }
+}
+
+
 def get_current_minute():
     """Get current minute timestamp"""
     return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def get_current_day():
+    """Get current day timestamp"""
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def load_quota(quota_file="api_quota.csv"):
@@ -36,12 +55,24 @@ def load_quota(quota_file="api_quota.csv"):
             reader = csv.DictReader(f)
             for row in reader:
                 api_key = row['api_key']
-                remaining = int(row['remaining_quota'])
-                minute = row['minute_timestamp']
+                
+                # Load price_single quota
+                price_remaining = int(row.get('price_remaining', 60))
+                price_minute = row.get('price_minute', '')
+                
+                # Load base quota
+                base_remaining = int(row.get('base_remaining', 1))
+                base_day = row.get('base_day', '')
                 
                 quota_cache[api_key] = {
-                    'remaining_quota': remaining,
-                    'minute_timestamp': minute
+                    'price_single': {
+                        'remaining_quota': price_remaining,
+                        'minute_timestamp': price_minute
+                    },
+                    'base': {
+                        'remaining_quota': base_remaining,
+                        'day_timestamp': base_day
+                    }
                 }
     except Exception as e:
         pass
@@ -54,10 +85,20 @@ def save_quota(quota_cache, quota_file="api_quota.csv"):
     try:
         with open(quota_file, 'w', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['api_key', 'remaining_quota', 'minute_timestamp'])
+            writer.writerow([
+                'api_key', 
+                'price_remaining', 'price_minute',
+                'base_remaining', 'base_day'
+            ])
             
             for api_key, info in quota_cache.items():
-                writer.writerow([api_key, info['remaining_quota'], info['minute_timestamp']])
+                writer.writerow([
+                    api_key,
+                    info['price_single']['remaining_quota'],
+                    info['price_single']['minute_timestamp'],
+                    info['base']['remaining_quota'],
+                    info['base']['day_timestamp']
+                ])
     except Exception as e:
         pass
 
@@ -70,14 +111,20 @@ def initialize_all_keys(quota_file="api_quota.csv"):
     
     quota_cache = load_quota(quota_file)
     current_minute = get_current_minute()
-    rate_limit = 60
+    current_day = get_current_day()
     
     # Ensure all keys are in the cache
     for api_key in api_keys:
         if api_key not in quota_cache:
             quota_cache[api_key] = {
-                'remaining_quota': rate_limit,
-                'minute_timestamp': current_minute
+                'price_single': {
+                    'remaining_quota': 60,
+                    'minute_timestamp': current_minute
+                },
+                'base': {
+                    'remaining_quota': 1,
+                    'day_timestamp': current_day
+                }
             }
     
     save_quota(quota_cache, quota_file)
@@ -91,12 +138,26 @@ def get_api_keys():
     return []
 
 
-def get_best_api_key(quota_file="api_quota.csv"):
-    """Get the API key with the most remaining quota"""
+def get_best_api_key(endpoint="price_single", quota_file="api_quota.csv"):
+    """
+    Get the API key with the most remaining quota for specified endpoint
+    
+    Args:
+        endpoint: API endpoint name ('price_single' or 'base')
+        quota_file: Path to quota CSV file
+    
+    Returns:
+        str: Best API key or None if no available keys
+    """
     quota_cache = load_quota(quota_file)
     api_keys = get_api_keys()
-    current_minute = get_current_minute()
-    rate_limit = 60
+    
+    if endpoint not in RATE_LIMITS:
+        print(f"Unknown endpoint: {endpoint}", file=sys.stderr)
+        return None
+    
+    rate_config = RATE_LIMITS[endpoint]
+    rate_limit = rate_config['limit']
     
     if not api_keys:
         return None
@@ -104,12 +165,20 @@ def get_best_api_key(quota_file="api_quota.csv"):
     best_key = None
     max_quota = -1
     
+    # Get current timestamp based on period
+    if rate_config['period'] == 'minute':
+        current_timestamp = get_current_minute()
+        timestamp_key = 'minute_timestamp'
+    else:  # day
+        current_timestamp = get_current_day()
+        timestamp_key = 'day_timestamp'
+    
     for api_key in api_keys:
-        if api_key in quota_cache:
-            quota_info = quota_cache[api_key]
+        if api_key in quota_cache and endpoint in quota_cache[api_key]:
+            quota_info = quota_cache[api_key][endpoint]
             
-            # If minute doesn't match, quota is restored
-            if quota_info['minute_timestamp'] != current_minute:
+            # If timestamp doesn't match, quota is restored
+            if quota_info.get(timestamp_key) != current_timestamp:
                 remaining = rate_limit
             else:
                 remaining = quota_info['remaining_quota']
@@ -123,51 +192,87 @@ def get_best_api_key(quota_file="api_quota.csv"):
     return best_key if max_quota > 0 else None
 
 
-def display_quota(api_key=None):
-    """Display quota for specific API key or all keys"""
+def display_quota(api_key=None, endpoint=None):
+    """
+    Display quota for specific API key or all keys
+    
+    Args:
+        api_key: Specific API key to display (None for all)
+        endpoint: Specific endpoint to display (None for all)
+    """
     quota_cache = load_quota()
     api_keys = get_api_keys()
     current_minute = get_current_minute()
-    rate_limit = 60
+    current_day = get_current_day()
     
     if not api_keys:
         print("No API keys found")
         return
     
-    # Filter to specific key if provided
     if api_key:
+        # Display specific key
         if api_key not in api_keys:
-            print(f"Key not found: {api_key[:8]}...")
+            print(f"API key not found in .env")
             return
-        keys_to_display = [api_key]
-    else:
-        keys_to_display = api_keys
-    
-    # Display quota for each key
-    for key in keys_to_display:
-        masked_key = f"{key[:8]}...{key[-4:]}"
         
-        if key in quota_cache:
-            quota_info = quota_cache[key]
-            
-            # If minute doesn't match, quota is restored
-            if quota_info['minute_timestamp'] != current_minute:
-                remaining = rate_limit
+        if api_key not in quota_cache:
+            print(f"No quota data for this API key")
+            return
+        
+        print(f"API Key: {api_key[:8]}...{api_key[-4:]}")
+        print()
+        
+        quota_info = quota_cache[api_key]
+        
+        # Display price_single quota
+        if not endpoint or endpoint == "price_single":
+            price_info = quota_info.get('price_single', {})
+            price_minute = price_info.get('minute_timestamp', '')
+            if price_minute != current_minute:
+                price_remaining = 60
             else:
-                remaining = quota_info['remaining_quota']
-        else:
-            # No quota record, assume full quota
-            remaining = rate_limit
+                price_remaining = price_info.get('remaining_quota', 60)
+            print(f"Price Single: {price_remaining}/60 (per minute)")
         
-        print(f"{masked_key}: {remaining}/{rate_limit}")
-    
-    # Show summary only for all keys
-    if not api_key and len(keys_to_display) > 1:
-        total_remaining = sum(
-            quota_cache[key]['remaining_quota'] if key in quota_cache and quota_cache[key]['minute_timestamp'] == current_minute else rate_limit
-            for key in keys_to_display
-        )
-        print(f"Total: {total_remaining}/{len(keys_to_display) * rate_limit}")
+        # Display base quota
+        if not endpoint or endpoint == "base":
+            base_info = quota_info.get('base', {})
+            base_day = base_info.get('day_timestamp', '')
+            if base_day != current_day:
+                base_remaining = 1
+            else:
+                base_remaining = base_info.get('remaining_quota', 1)
+            print(f"Base Info:    {base_remaining}/1  (per day)")
+    else:
+        # Display all keys
+        print(f"{'API Key':<20} {'Price (min)':<15} {'Base (day)':<15}")
+        print("=" * 50)
+        
+        for key in api_keys:
+            masked_key = f"{key[:8]}...{key[-4:]}"
+            
+            if key in quota_cache:
+                quota_info = quota_cache[key]
+                
+                # Price quota
+                price_info = quota_info.get('price_single', {})
+                price_minute = price_info.get('minute_timestamp', '')
+                if price_minute != current_minute:
+                    price_remaining = 60
+                else:
+                    price_remaining = price_info.get('remaining_quota', 60)
+                
+                # Base quota
+                base_info = quota_info.get('base', {})
+                base_day = base_info.get('day_timestamp', '')
+                if base_day != current_day:
+                    base_remaining = 1
+                else:
+                    base_remaining = base_info.get('remaining_quota', 1)
+                
+                print(f"{masked_key:<20} {price_remaining:>2}/60         {base_remaining:>1}/1")
+            else:
+                print(f"{masked_key:<20} {'60/60':<15} {'1/1':<15}")
 
 
 def main():
@@ -197,22 +302,31 @@ Examples:
     
     parser.add_argument(
         '--best',
-        action='store_true',
-        help='Get the best API key with most quota'
+        type=str,
+        choices=['price_single', 'base'],
+        help='Get the best API key for specified endpoint'
+    )
+    
+    parser.add_argument(
+        '--endpoint',
+        type=str,
+        choices=['price_single', 'base'],
+        help='Filter by specific endpoint'
     )
     
     args = parser.parse_args()
     
     if args.init:
         initialize_all_keys()
+        print("✓ Initialized quota for all API keys")
     elif args.best:
-        best_key = get_best_api_key()
+        best_key = get_best_api_key(endpoint=args.best)
         if best_key:
             print(best_key)
         else:
             sys.exit(1)
     else:
-        display_quota(api_key=args.api_key)
+        display_quota(api_key=args.api_key, endpoint=args.endpoint)
 
 
 if __name__ == "__main__":
