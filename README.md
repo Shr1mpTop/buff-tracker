@@ -7,56 +7,38 @@ hi~各位导🐕中午好!我谨代表导🐕联盟设计出便携获取不同�
 3. 邮箱通知
 4. 实时自动交易
 
-## 功能特性
+## 快速开始
 
-- ✅ 支持多个API密钥自动轮询
-- ✅ 智能速率限制管理(每分钟60次)
-- ✅ 额度持久化存储(CSV)
-- ✅ 线程安全设计
-- ✅ 自动密钥切换和重试
-
-## 安装
-
-### 开发模式安装 (推荐)
-```bash
-pip install -e .
-```
-
-### 直接使用
+### 1. 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-## 配置
-
-在项目根目录创建 `.env` 文件，添加你的API密钥:
-
+### 2. 配置API密钥
+创建 `.env` 文件，添加你的SteamDT API密钥:
 ```env
 API_KEYS=key1,key2,key3,...
 ```
 
-## 使用示例
-
-### 作为Python包使用
+### 3. 使用示例
 
 ```python
-from buff_tracker import SteamDTAPIManager
+from api_manager import SteamDTAPIManager
 
-# 创建管理器实例
+# 创建管理器
 manager = SteamDTAPIManager()
 
-# 查询单个物品价格
+# 查询价格
 result = manager.get_price_single("AK-47 | Redline (Field-Tested)")
 print(result)
 
-# 查看当前额度状态
+# 查看额度
 status = manager.get_quota_status()
 for s in status[:5]:
     print(f"{s['api_key']}: {s['remaining_quota']}/{s['total_quota']}")
 ```
 
-### 运行测试脚本
-
+### 4. 运行测试
 ```bash
 python test.py
 ```
@@ -65,17 +47,9 @@ python test.py
 
 ```
 buff-tracker/
-├── __init__.py          # 包初始化文件
-├── api_manager.py       # API管理器核心代码
-├── test.py             # 测试脚本
-├── setup.py            # 包安装配置
-├── requirements.txt    # 依赖项
-├── .env               # 环境变量(API密钥)
-├── .gitignore         # Git忽略文件
-├── api_quota.csv      # 额度记录(自动生成)
-└── README.md          # 本文件
+├── api_manager.py      # API管理器
+├── test.py            # 测试脚本
+├── requirements.txt   # 依赖项
+├── .env              # API密钥配置
+└── README.md         # 说明文档
 ```
-
-## License
-
-MIT License

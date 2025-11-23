@@ -5,8 +5,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
 
 # CSV data files
 api_quota.csv
@@ -14,8 +12,6 @@ api_quota.csv
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
 # OS
 .DS_Store
