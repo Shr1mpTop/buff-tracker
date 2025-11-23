@@ -26,7 +26,7 @@ pip install -r requirements.txt
 
 **基本用法:**
 ```bash
-python ddrager.py --apikey YOUR_API_KEY --hashname "AK-47 | Redline (Field-Tested)"
+python utils/ddrager.py --apikey YOUR_API_KEY --hashname "AK-47 | Redline (Field-Tested)"
 ```
 
 **输出原始 JSON 数据:**
@@ -53,7 +53,7 @@ import json
 
 # 调用 ddrager 获取数据
 result = subprocess.run(
-    ['python', 'ddrager.py', '--apikey', 'YOUR_KEY', '--hashname', 'AK-47 | Redline (Field-Tested)'],
+    ['python', 'utils/ddrager.py', '--apikey', 'YOUR_KEY', '--hashname', 'AK-47 | Redline (Field-Tested)'],
     capture_output=True,
     text=True
 )
@@ -64,7 +64,7 @@ data = json.loads(result.stdout)
 
 ```bash
 # 在 Shell 中调用
-data=$(python ddrager.py --apikey YOUR_KEY --hashname "AWP | Asiimov (Field-Tested)")
+data=$(python utils/ddrager.py --apikey YOUR_KEY --hashname "AWP | Asiimov (Field-Tested)")
 echo $data | jq .
 ```
 
@@ -72,7 +72,8 @@ echo $data | jq .
 
 ```
 buff-tracker/
-├── ddrager.py         # 核心数据获取工具
+├── utils/
+│   └── ddrager.py    # 核心数据获取工具
 ├── test.py           # 测试脚本
 ├── requirements.txt  # 依赖项
 ├── .env             # API密钥配置(可选)
