@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  cs2-tracker-api:
+    build: .
+    container_name: cs2-price-tracker
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    env_file:
+      - .env
+    volumes:
+      - ./api_quota.csv:/app/api_quota.csv
+      - ./cs2_kinds_cache.json:/app/cs2_kinds_cache.json
+    restart: unless-stopped
+    networks:
+      - cs2-network
+
+networks:
+  cs2-network:
+    driver: bridge

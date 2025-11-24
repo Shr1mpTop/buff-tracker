@@ -2,23 +2,68 @@
 
 CS2 饰品价格追踪工具 - 服务化分层架构的数据获取与管理系统
 
+**🚀 现已支持 FastAPI 微服务部署！**
+
 ## 快速开始
 
-### 安装依赖
+### 方式 1: 命令行工具
+
+#### 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-### 配置 API 密钥
+#### 配置 API 密钥
 创建 `.env` 文件:
 ```env
 API_KEYS=key1,key2,key3,...
+DB_HOST=your_db_host
+DB_PORT=3307
+DB_NAME=your_db_name
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
 ```
 
-### 获取价格数据
+#### 获取价格数据
 ```bash
 python utils/ddrager.py --hashname "AWP | Pit Viper (Field-Tested)"
 ```
+
+---
+
+### 方式 2: FastAPI 微服务（生产环境推荐）
+
+#### 启动 API 服务
+```bash
+# 开发环境
+python api/main.py
+
+# 或使用 uvicorn
+uvicorn api.main:app --reload
+
+# Docker 部署
+docker-compose up -d
+```
+
+#### 访问 API 文档
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+#### API 使用示例
+```bash
+# 健康检查
+curl http://localhost:8000/api/health
+
+# 搜索饰品
+curl "http://localhost:8000/api/search?name=AK-47&num=5"
+
+# 获取价格
+curl "http://localhost:8000/api/price/AK-47%20|%20Redline%20(Field-Tested)"
+```
+
+**详细 API 文档**: 查看 [docs/api.md](docs/api.md)
+
+---
 
 ## 工具集
 
@@ -159,19 +204,28 @@ api_quota.csv            # 存储层 - 额度持久化
 ## 项目结构
 ```
 buff-tracker/
+├── api/                        # FastAPI 微服务
+│   ├── main.py                 # FastAPI 应用入口
+│   └── routers/                # API 路由模块
+│       ├── health.py           # 健康检查
+│       ├── price.py            # 价格查询
+│       └── search.py           # 饰品搜索
 ├── utils/
-│   ├── ddrager.py          # 价格数据获取（price_single 端点）
-│   ├── kinds.py            # 饰品基础信息（base 端点）
-│   ├── searchName.py       # 数据库模糊搜索工具
-│   └── api-manager.py      # API 密钥管理服务
+│   ├── ddrager.py              # 价格数据获取（price_single 端点）
+│   ├── kinds.py                # 饰品基础信息（base 端点）
+│   ├── searchName.py           # 数据库模糊搜索工具
+│   └── api-manager.py          # API 密钥管理服务
 ├── docs/
-│   ├── db.md               # 数据库设计文档
-│   └── design.md           # 架构设计文档
-├── api_quota.csv           # 额度记录（自动生成）
-├── cs2_kinds_cache.json    # 饰品信息缓存
-├── .env                    # API 密钥配置
-├── requirements.txt        # 依赖项
-└── README.md               # 本文档
+│   ├── db.md                   # 数据库设计文档
+│   ├── design.md               # 架构设计文档
+│   └── api.md                  # FastAPI 使用文档
+├── Dockerfile                  # Docker 容器配置
+├── docker-compose.yml          # Docker Compose 配置
+├── api_quota.csv               # 额度记录（自动生成）
+├── cs2_kinds_cache.json        # 饰品信息缓存
+├── .env                        # API 密钥配置
+├── requirements.txt            # 依赖项
+└── README.md                   # 本文档
 ```
 
 ## 输出示例
