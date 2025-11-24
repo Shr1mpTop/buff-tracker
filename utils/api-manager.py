@@ -138,6 +138,109 @@ def get_api_keys():
     return []
 
 
+def request_and_allocate_key(endpoint: str, quota_file="api_quota.csv") -> str:
+    """
+    Service interface: Allocate best API key for data layer request
+    Also decrements quota for the allocated key
+    
+    Args:
+        endpoint: API endpoint name ('price_single' or 'base')
+        quota_file: Path to quota CSV file
+        
+    Returns:
+        str: Allocated API key or None if no available keys
+    """
+    # Initialize if needed
+    initialize_all_keys(quota_file)
+    
+    quota_cache = load_quota(quota_file)
+    api_keys = get_api_keys()
+    
+    if endpoint not in RATE_LIMITS:
+        return None
+    
+    rate_config = RATE_LIMITS[endpoint]
+    rate_limit = rate_config['limit']
+    
+    if not api_keys:
+        return None
+    
+    # Get current timestamp based on period
+    if rate_config['period'] == 'minute':
+        current_timestamp = get_current_minute()
+        timestamp_key = 'minute_timestamp'
+    else:  # day
+        current_timestamp = get_current_day()
+        timestamp_key = 'day_timestamp'
+    
+    # Find best key and allocate
+    best_key = None
+    max_quota = -1
+    
+    for api_key in api_keys:
+        # Initialize if not in cache
+        if api_key not in quota_cache:
+            quota_cache[api_key] = {
+                'price_single': {
+                    'remaining_quota': 60,
+                    'minute_timestamp': get_current_minute()
+                },
+                'base': {
+                    'remaining_quota': 1,
+                    'day_timestamp': get_current_day()
+                }
+            }
+        
+        if endpoint in quota_cache[api_key]:
+            quota_info = quota_cache[api_key][endpoint]
+            
+            # Reset quota if time period changed
+            if quota_info.get(timestamp_key) != current_timestamp:
+                quota_info['remaining_quota'] = rate_limit
+                quota_info[timestamp_key] = current_timestamp
+            
+            remaining = quota_info['remaining_quota']
+        else:
+            remaining = rate_limit
+        
+        if remaining > max_quota:
+            max_quota = remaining
+            best_key = api_key
+    
+    # Allocate key (decrement quota)
+    if best_key and max_quota > 0:
+        quota_cache[best_key][endpoint]['remaining_quota'] -= 1
+        save_quota(quota_cache, quota_file)
+        return best_key
+    
+    return None
+
+
+def notify_usage_result(endpoint: str, api_key: str, success: bool, quota_file="api_quota.csv"):
+    """
+    Service interface: Receive notification from data layer about API call result
+    If failed, restore the quota (rollback allocation)
+    
+    Args:
+        endpoint: API endpoint name
+        api_key: The API key that was used
+        success: Whether the API call succeeded
+        quota_file: Path to quota CSV file
+    """
+    if not success:
+        # Rollback: restore quota if call failed
+        quota_cache = load_quota(quota_file)
+        
+        if api_key in quota_cache and endpoint in quota_cache[api_key]:
+            rate_limit = RATE_LIMITS[endpoint]['limit']
+            current_quota = quota_cache[api_key][endpoint]['remaining_quota']
+            
+            # Don't exceed rate limit
+            if current_quota < rate_limit:
+                quota_cache[api_key][endpoint]['remaining_quota'] += 1
+                save_quota(quota_cache, quota_file)
+
+
 def get_best_api_key(endpoint="price_single", quota_file="api_quota.csv"):
     """
     Get the API key with the most remaining quota for specified endpoint
@@ -314,8 +417,52 @@ Examples:
         help='Filter by specific endpoint'
     )
     
+    parser.add_argument(
+        '--request-key',
+        type=str,
+        choices=['price_single', 'base'],
+        help='Service interface: Request and allocate best API key for endpoint'
+    )
+    
+    parser.add_argument(
+        '--notify-usage',
+        action='store_true',
+        help='Service interface: Notify about API call result (requires --endpoint, --api-key, --success/--failed)'
+    )
+    
+    parser.add_argument(
+        '--success',
+        action='store_true',
+        help='API call succeeded (used with --notify-usage)'
+    )
+    
+    parser.add_argument(
+        '--failed',
+        action='store_true',
+        help='API call failed (used with --notify-usage)'
+    )
+    
     args = parser.parse_args()
     
+    # Service interfaces for data layer
+    if args.request_key:
+        key = request_and_allocate_key(endpoint=args.request_key)
+        if key:
+            print(key)
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    
+    if args.notify_usage:
+        if not args.endpoint or not args.api_key:
+            print("Error: --notify-usage requires --endpoint and --api-key", file=sys.stderr)
+            sys.exit(1)
+        
+        success = args.success and not args.failed
+        notify_usage_result(args.endpoint, args.api_key, success)
+        sys.exit(0)
+    
+    # Original interfaces
     if args.init:
         initialize_all_keys()
         print("✓ Initialized quota for all API keys")

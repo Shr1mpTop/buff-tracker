@@ -3,7 +3,8 @@
 """
 Get Price - Automated skin price fetcher
 
-Automatically selects the best API key and fetches price data.
+Automatically calls ddrager to fetch price data.
+ddrager requests API key from api-manager internally.
 """
 
 import sys
@@ -12,39 +13,19 @@ import json
 import subprocess
 
 
-def get_best_api_key():
-    """Get the API key with the most remaining quota"""
-    result = subprocess.run(
-        ['python', 'utils/api-manager.py', '--best', 'price_single'],
-        capture_output=True,
-        text=True
-    )
-    
-    if result.returncode == 0:
-        api_key = result.stdout.strip()
-        return api_key if api_key else None
-    
-    return None
-
-
 def get_price(hashname):
-    """Fetch price data using the best available API key"""
-    # Initialize all keys first time
-    subprocess.run(
-        ['python', 'utils/api-manager.py', '--init'],
-        capture_output=True
-    )
+    """
+    Fetch price data using ddrager (which handles API key management internally)
     
-    # Get the best API key
-    api_key = get_best_api_key()
-    
-    if not api_key:
-        print("No available API keys with remaining quota", file=sys.stderr)
-        return None
-    
-    # Call ddrager to fetch data
+    Args:
+        hashname: Steam market hash name
+        
+    Returns:
+        dict: Price data or None
+    """
+    # Call ddrager (it will request API key from api-manager automatically)
     result = subprocess.run(
-        ['python', 'utils/ddrager.py', '--apikey', api_key, '--hashname', hashname],
+        ['python', 'utils/ddrager.py', '--hashname', hashname],
         capture_output=True,
         text=True
     )
@@ -54,8 +35,11 @@ def get_price(hashname):
             return json.loads(result.stdout)
         except json.JSONDecodeError:
             return None
-    
-    return None
+    else:
+        # Print error message from ddrager
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        return None
 
 
 def main():
