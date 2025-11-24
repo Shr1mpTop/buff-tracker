@@ -1,6 +1,6 @@
 # Buff Tracker
 
-CS2 饰品价格追踪工具 - 模块化设计的数据获取与管理系统
+CS2 饰品价格追踪工具 - 服务化分层架构的数据获取与管理系统
 
 ## 快速开始
 
@@ -17,40 +17,46 @@ API_KEYS=key1,key2,key3,...
 
 ### 获取价格数据
 ```bash
-python get_price.py --hashname "AK-47 | Redline (Field-Tested)"
+python utils/ddrager.py --hashname "AWP | Pit Viper (Field-Tested)"
 ```
 
 ## 工具集
 
-### 1. get_price - 智能价格获取（推荐）
-自动选择剩余额度最多的 API key，获取价格数据。
+### 1. ddrager - 价格数据获取（推荐）
+自动向 api-manager 请求 API key，调用 SteamDT API 获取价格数据。
 
 ```bash
-python get_price.py --hashname "AK-47 | Redline (Field-Tested)"
+python utils/ddrager.py --hashname "AK-47 | Redline (Field-Tested)"
 ```
 
 **特性:**
-- ✅ 自动分配最优 API key
-- ✅ 智能额度管理
+- ✅ 自动请求最优 API key（无需手动传入）
+- ✅ 自动通知 api-manager 使用结果
+- ✅ 失败自动回滚额度
 - ✅ 返回原始 JSON 数据
 
+**内部工作流程:**
+1. 请求 api-manager 分配 API key
+2. 调用 SteamDT API
+3. 通知 api-manager 调用结果（成功/失败）
+
 ---
 
-### 2. ddrager - 核心数据获取
-底层数据获取工具，直接调用 SteamDT API。
+### 2. kinds - CS2 饰品基础信息获取
+获取所有 CS2 饰品的基础信息（1 请求/天限制）。
 
 ```bash
-python utils/ddrager.py --apikey YOUR_KEY --hashname "AK-47 | Redline (Field-Tested)"
+python utils/kinds.py
 ```
 
-**职责:**
-- 纯数据获取，返回 API 原始响应
-- 更新指定 API key 的额度记录
-- 可被其他工具调用
+**特性:**
+- ✅ 自动请求 base 端点专用 API key
+- ✅ 缓存到 `cs2_kinds_cache.json`
+- ✅ 严格的 1/天限流保护
 
 ---
 
-### 3. api-manager - API 密钥管理
+### 3. api-manager - API 密钥管理服务
 管理所有 API key 的额度状态。
 
 **初始化所有密钥:**
@@ -70,50 +76,69 @@ python utils/api-manager.py --api-key YOUR_KEY
 
 **获取最优密钥:**
 ```bash
-python utils/api-manager.py --best
+python utils/api-manager.py --best price_single
+```
+
+**服务接口（供数据层调用）:**
+```bash
+# 分配 API key（自动扣减额度）
+python utils/api-manager.py --request-key price_single
+
+# 通知使用结果（失败则回滚额度）
+python utils/api-manager.py --notify-usage --endpoint price_single --api-key KEY --success
+python utils/api-manager.py --notify-usage --endpoint price_single --api-key KEY --failed
 ```
 
 **职责:**
 - 初始化所有 API key 到 CSV
 - 查询和显示额度状态
-- 选择剩余额度最多的 key
+- **提供服务接口**：分配 key、追踪额度、失败回滚
+- 支持多端点：`price_single` (60/分钟), `base` (1/天)
 
 ## 设计架构
 
-### 职责分离
+### 服务化分层设计
 ```
-get_price.py          # 业务层 - 智能调用
-    ↓ 调用
-api-manager.py        # 管理层 - 额度管理
-    ↓ 提供最优 key
-ddrager.py           # 数据层 - 纯数据获取
-    ↓ 更新额度
-api_quota.csv        # 存储层 - 额度持久化
+用户
+  ↓
+ddrager.py / kinds.py    # 数据层 - 请求服务，获取数据
+  ↓ 请求 API key
+  ↓ 通知使用结果
+api-manager.py           # 管理层 - 提供服务，监听调用
+  ↓ 读写
+api_quota.csv            # 存储层 - 额度持久化
 ```
 
-### 数据流
-1. `get_price` 调用 `api-manager --init` 确保所有 key 初始化
-2. `get_price` 调用 `api-manager --best` 获取最优 key
-3. `get_price` 调用 `ddrager` 使用最优 key 获取数据
-4. `ddrager` 更新该 key 的额度到 CSV
-5. 返回原始 JSON 数据
+### 调用流程（以 ddrager 为例）
+1. `ddrager` → `api-manager --request-key price_single`（获取 key，自动扣减额度）
+2. `ddrager` → 调用 SteamDT API
+3. `ddrager` → `api-manager --notify-usage --success/--failed`（通知结果，失败则回滚）
+
+**核心优势:**
+- ✅ **依赖倒置**：数据层主动请求，管理层提供服务
+- ✅ **自动回滚**：API 调用失败时恢复已扣减额度
+- ✅ **解耦彻底**：数据层无需知道额度管理实现细节
 
 ## 项目结构
 ```
 buff-tracker/
-├── get_price.py         # 智能价格获取工具
 ├── utils/
-│   ├── ddrager.py       # 核心数据获取
-│   └── api-manager.py   # API 密钥管理
-├── api_quota.csv        # 额度记录（自动生成）
-├── .env                 # API 密钥配置
-├── requirements.txt     # 依赖项
-└── README.md            # 本文档
+│   ├── ddrager.py          # 价格数据获取（price_single 端点）
+│   ├── kinds.py            # 饰品基础信息（base 端点）
+│   └── api-manager.py      # API 密钥管理服务
+├── docs/
+│   ├── db.md               # 数据库设计文档
+│   └── design.md           # 架构设计文档
+├── api_quota.csv           # 额度记录（自动生成）
+├── cs2_kinds_cache.json    # 饰品信息缓存
+├── .env                    # API 密钥配置
+├── requirements.txt        # 依赖项
+└── README.md               # 本文档
 ```
 
 ## 输出示例
 
-### get_price 输出
+### ddrager 输出
 ```json
 {
   "success": true,
@@ -142,9 +167,25 @@ Total: 1919/1920
 
 ## 开发规范
 
-- **ddrager**: 只负责数据获取，不包含业务逻辑
-- **api-manager**: 只负责额度管理，不调用 API
-- **get_price**: 协调调用，实现智能分配
+### 单一职责原则
+- **ddrager/kinds**: 数据层 - 纯 HTTP 请求，无额度管理逻辑
+- **api-manager**: 管理层 - 只负责 key 分配与额度追踪，不调用业务 API
+- **通信方式**: subprocess RPC（数据层调用管理层服务接口）
+
+### 依赖方向
+- ✅ 数据层依赖管理层（请求服务）
+- ❌ 管理层不依赖数据层（被动响应）
+
+### 错误处理
+- API 调用失败时，数据层通知管理层 `--failed`
+- 管理层自动回滚已扣减的额度
+
+---
+
+## 详细文档
+
+- **架构设计**: 查看 `docs/design.md` 了解服务化分层架构
+- **数据库设计**: 查看 `docs/db.md` 了解 cs2_items 表结构
 
 ## License
 

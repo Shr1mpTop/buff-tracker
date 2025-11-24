@@ -87,7 +87,7 @@ def fetch_price(hashname: str) -> dict:
         "Content-Type": "application/json"
     }
     
-    params = {"market_hash_name": hashname}
+    params = {"marketHashName": hashname}
     
     try:
         response = requests.get(
