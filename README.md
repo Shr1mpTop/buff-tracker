@@ -56,7 +56,44 @@ python utils/kinds.py
 
 ---
 
-### 3. api-manager - API 密钥管理服务
+### 3. searchName - 数据库模糊搜索
+从数据库中模糊搜索 CS2 饰品名称，返回最匹配的结果。
+
+```bash
+python utils/searchName.py --name "AK-47" --num 5
+python utils/searchName.py --name "红线" --num 10
+python utils/searchName.py --name "Redline" --num 3
+```
+
+**特性:**
+- ✅ 支持中英文模糊搜索
+- ✅ 智能相关度排序（精确匹配 > 开头匹配 > 包含匹配）
+- ✅ 返回 market_hash_name 及所有平台 ID
+- ✅ 可指定返回数量（1-100）
+
+**输出示例:**
+```json
+{
+  "success": true,
+  "query": "红线",
+  "count": 3,
+  "data": [
+    {
+      "id": 187,
+      "name": "AK-47 | 红线 (久经沙场)",
+      "market_hash_name": "AK-47 | Redline (Field-Tested)",
+      "buff_id": "33960",
+      "c5_id": "22499",
+      "youpin_id": "1414",
+      "haloskins_id": "22499"
+    }
+  ]
+}
+```
+
+---
+
+### 4. api-manager - API 密钥管理服务
 管理所有 API key 的额度状态。
 
 **初始化所有密钥:**
@@ -125,6 +162,7 @@ buff-tracker/
 ├── utils/
 │   ├── ddrager.py          # 价格数据获取（price_single 端点）
 │   ├── kinds.py            # 饰品基础信息（base 端点）
+│   ├── searchName.py       # 数据库模糊搜索工具
 │   └── api-manager.py      # API 密钥管理服务
 ├── docs/
 │   ├── db.md               # 数据库设计文档
