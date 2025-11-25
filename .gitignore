@@ -6,8 +6,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# CSV data files
+# data files
 api_quota.csv
+cs2_kinds_cache.json
 
 # IDE
 .vscode/
