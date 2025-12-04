@@ -35,8 +35,7 @@ def get_db_connection():
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
             connection_timeout=10,
-            use_pure=True,
-            ssl_disabled=True
+            use_pure=True
         )
         return connection
     except Error as e:
