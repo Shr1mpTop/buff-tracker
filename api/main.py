@@ -17,7 +17,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.routers import price, search, health
+from api.routers import price, search, health, quota
 
 
 # Create FastAPI application
@@ -49,6 +49,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(price.router, prefix="/api", tags=["Price"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
+app.include_router(quota.router, prefix="/api", tags=["Quota"])
 
 
 # Root endpoint
@@ -64,6 +65,8 @@ async def root():
         "docs": "/docs",
         "endpoints": {
             "health": "/api/health",
+            "status": "/api/status",
+            "quota": "/api/quota",
             "price": "/api/price/{hashname}",
             "search": "/api/search?name={query}&num={limit}"
         }
