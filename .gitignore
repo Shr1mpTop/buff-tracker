@@ -9,6 +9,7 @@ __pycache__/
 # data files
 api_quota.csv
 cs2_kinds_cache.json
+logs/
 
 # IDE
 .vscode/

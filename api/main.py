@@ -36,6 +36,8 @@ app.add_middleware(
     allow_origins=[
         "https://hezhili.online",
         "https://www.hezhili.online",
+        "https://bufftracker.hezhili.online",
+        "http://bufftracker.hezhili.online",
         "http://localhost:3000",  # Development
         "http://localhost:5173",  # Vite dev server
     ],

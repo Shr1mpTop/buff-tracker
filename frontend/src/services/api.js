@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// API base URL - adjust based on environment
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// API base URL - defaults to current origin so production hits the same host (via Nginx)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || window.location.origin
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

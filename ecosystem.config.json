@@ -3,8 +3,8 @@
     {
       "name": "cs2-tracker-api",
       "script": "uvicorn",
-      "args": "api.main:app --host 0.0.0.0 --port 8000",
-      "cwd": "/path/to/buff-tracker",
+      "args": "api.main:app --host 0.0.0.0 --port 8010 --env-file .env",
+      "cwd": "/root/buff-tracker",
       "interpreter": "python3",
       "instances": 1,
       "exec_mode": "fork",
@@ -14,8 +14,8 @@
       "env": {
         "NODE_ENV": "production"
       },
-      "error_file": "./logs/err.log",
-      "out_file": "./logs/out.log",
+      "error_file": "/root/buff-tracker/logs/err.log",
+      "out_file": "/root/buff-tracker/logs/out.log",
       "log_date_format": "YYYY-MM-DD HH:mm:ss Z"
     }
   ]
