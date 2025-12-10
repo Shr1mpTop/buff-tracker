@@ -10,3 +10,8 @@ pydantic>=2.5.0
 
 # Optional: for async database operations
 # aiomysql>=0.2.0
+
+# Email service dependencies
+alibabacloud-dm20151123
+alibabacloud-tea-openapi
+alibabacloud-tea-util
