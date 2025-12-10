@@ -18,10 +18,17 @@ import requests
 import subprocess
 from pathlib import Path
 
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils.api_manager import request_and_allocate_key, rollback_quota_on_failure
+
 
 # API configuration
 API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/price/single"
+BATCH_API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/price/batch"
 ENDPOINT_NAME = "price_single"
+BATCH_ENDPOINT_NAME = "price_batch"
 
 
 def request_api_key() -> str:
@@ -31,17 +38,17 @@ def request_api_key() -> str:
     Returns:
         str: API key or None if no available keys
     """
-    result = subprocess.run(
-        ['python', 'utils/api-manager.py', 'request', '--endpoint', ENDPOINT_NAME],
-        capture_output=True,
-        text=True,
-        cwd=Path(__file__).parent.parent
-    )
+    return request_and_allocate_key(ENDPOINT_NAME)
+
+
+def request_batch_api_key() -> str:
+    """
+    Request best available API key from api-manager for batch endpoint
     
-    if result.returncode == 0:
-        api_key = result.stdout.strip()
-        return api_key if api_key else None
-    return None
+    Returns:
+        str: API key or None if no available keys
+    """
+    return request_and_allocate_key(BATCH_ENDPOINT_NAME)
 
 
 def rollback_api_usage(api_key: str):
@@ -51,13 +58,17 @@ def rollback_api_usage(api_key: str):
     Args:
         api_key: The API key that was used
     """
-    subprocess.run(
-        ['python', 'utils/api-manager.py', 'rollback', 
-         '--endpoint', ENDPOINT_NAME,
-         '--api_key', api_key],
-        capture_output=True,
-        cwd=Path(__file__).parent.parent
-    )
+    rollback_quota_on_failure(api_key, ENDPOINT_NAME)
+
+
+def rollback_batch_api_usage(api_key: str):
+    """
+    Notify api-manager about a failed batch API call to rollback quota
+    
+    Args:
+        api_key: The API key that was used
+    """
+    rollback_quota_on_failure(api_key, BATCH_ENDPOINT_NAME)
 
 
 def fetch_price(hashname: str) -> dict:
@@ -112,6 +123,61 @@ def fetch_price(hashname: str) -> dict:
         }
     except Exception as e:
         rollback_api_usage(api_key)
+        return {"error": "unexpected", "message": str(e)}
+
+
+def fetch_batch_price(hashnames: list) -> dict:
+    """
+    Fetch batch price data for multiple items
+    
+    Args:
+        hashnames: List of Steam market hash names
+        
+    Returns:
+        dict: API response data or error
+    """
+    # Step 1: Request API key from manager
+    api_key = request_batch_api_key()
+    
+    if not api_key:
+        return {
+            "error": "no_api_key",
+            "message": "No available API key from api-manager"
+        }
+    
+    # Step 2: Call API
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {"marketHashNames": hashnames}
+    
+    try:
+        response = requests.post(
+            BATCH_API_ENDPOINT,
+            headers=headers,
+            json=data,
+            timeout=30  # Longer timeout for batch
+        )
+        
+        success = response.status_code == 200
+        
+        if not success:
+            # Rollback quota on failure
+            rollback_batch_api_usage(api_key)
+            
+        return response.json()
+        
+    except requests.RequestException as e:
+        # Rollback quota on network errors or timeouts
+        rollback_batch_api_usage(api_key)
+        return {
+            "error": "request_failed",
+            "message": str(e)
+        }
+    except Exception as e:
+        rollback_batch_api_usage(api_key)
         return {"error": "unexpected", "message": str(e)}
 
 

@@ -3,7 +3,7 @@ name = "buff-tracker"
 version = "0.1.0"
 description = "A CS2 item price tracker with a FastAPI backend."
 authors = ["Your Name <you@example.com>"]
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
@@ -11,6 +11,8 @@ dependencies = [
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.5.0",
+    "click>=8.0.0",
+    "typing-extensions>=4.0.0",
 ]
 
 [tool.uv]

@@ -29,6 +29,8 @@ def initialize_database():
         api_key TEXT PRIMARY KEY,
         price_single_quota INTEGER DEFAULT 60,
         price_single_timestamp TEXT,
+        price_batch_quota INTEGER DEFAULT 1,
+        price_batch_timestamp TEXT,
         base_quota INTEGER DEFAULT 1,
         base_timestamp TEXT
     )
@@ -41,8 +43,8 @@ def initialize_database():
         current_day = datetime.now().strftime("%Y-%m-%d")
         for key in api_keys:
             cursor.execute(
-                "INSERT INTO api_keys (api_key, price_single_timestamp, base_timestamp) VALUES (?, ?, ?)",
-                (key, current_minute, current_day)
+                "INSERT INTO api_keys (api_key, price_single_timestamp, price_batch_timestamp, base_timestamp) VALUES (?, ?, ?, ?)",
+                (key, current_minute, current_minute, current_day)
             )
 
     conn.commit()

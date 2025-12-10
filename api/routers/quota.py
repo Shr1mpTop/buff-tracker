@@ -7,8 +7,7 @@ Provides API quota information.
 """
 
 from fastapi import APIRouter
-from pathlib import Path
-import csv
+from utils.db_manager import get_db_connection
 
 router = APIRouter()
 
@@ -21,43 +20,38 @@ async def get_quota():
     Returns:
         dict: Quota information
     """
-    quota_file = Path(__file__).parent.parent.parent / "api_quota.csv"
-    
-    if not quota_file.exists():
-        return {
-            "success": False,
-            "error": "quota_file_not_found",
-            "remaining": 0,
-            "total": 60
-        }
-    
     try:
-        # Read quota file
-        with open(quota_file, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            
-            if not rows:
-                return {
-                    "success": False,
-                    "remaining": 0,
-                    "total": 60
-                }
-            
-            # Calculate total remaining quota from all API keys
-            total_remaining = sum(int(row.get('price_remaining', 0)) for row in rows)
-            total_quota = len(rows) * 60  # Each key has 60 requests per minute
-            
-            # Get current minute from latest row
-            current_minute = rows[-1].get('price_minute', '') if rows else ''
-            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Query all API keys and their quotas
+        cursor.execute("SELECT api_key, price_single_quota, price_single_timestamp FROM api_keys")
+        rows = cursor.fetchall()
+        
+        if not rows:
             return {
-                "success": True,
-                "remaining": total_remaining,
-                "total": total_quota,
-                "timestamp": current_minute
+                "success": False,
+                "error": "no_api_keys_found",
+                "remaining": 0,
+                "total": 0
             }
-            
+        
+        # Calculate total remaining quota from all API keys
+        total_remaining = sum(row['price_single_quota'] for row in rows)
+        total_quota = len(rows) * 60  # Each key has 60 requests per minute
+        
+        # Get latest timestamp
+        current_minute = max((row['price_single_timestamp'] for row in rows if row['price_single_timestamp']), default='')
+        
+        conn.close()
+        
+        return {
+            "success": True,
+            "remaining": total_remaining,
+            "total": total_quota,
+            "timestamp": current_minute
+        }
+        
     except Exception as e:
         return {
             "success": False,

@@ -3,7 +3,7 @@
     {
       "name": "cs2-tracker-api",
       "script": "uvicorn",
-      "args": "api.main:app --host 0.0.0.0 --port 8000",
+      "args": "api.main:app --host 0.0.0.0 --port 8010",
       "cwd": "/path/to/buff-tracker",
       "interpreter": "python3",
       "instances": 1,

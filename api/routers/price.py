@@ -15,13 +15,26 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from utils.ddrager import fetch_price
+from utils.ddrager import fetch_price, fetch_batch_price
 
 router = APIRouter()
 
 
 class PriceResponse(BaseModel):
     """Price response model"""
+    success: bool
+    data: Optional[list] = None
+    error: Optional[str] = None
+    message: Optional[str] = None
+
+
+class BatchPriceRequest(BaseModel):
+    """Batch price request model"""
+    hashnames: list[str]
+
+
+class BatchPriceResponse(BaseModel):
+    """Batch price response model"""
     success: bool
     data: Optional[list] = None
     error: Optional[str] = None
@@ -65,20 +78,86 @@ async def get_item_price(hashname: str):
         )
 
 
-@router.get("/price")
-async def get_price_by_query(
-    hashname: str = Query(..., description="Steam market hash name")
-):
+@router.post("/price/batch", response_model=BatchPriceResponse)
+async def get_batch_item_prices(request: BatchPriceRequest):
     """
-    Alternative endpoint: Get price by query parameter
+    Get batch price data for multiple CS2 items
     
     Args:
-        hashname: Steam market hash name
+        request: BatchPriceRequest with list of market hash names
         
     Returns:
-        PriceResponse: Price data
+        BatchPriceResponse: Batch price data from SteamDT
         
     Example:
-        GET /api/price?hashname=AWP | Asiimov (Field-Tested)
+        POST /api/price/batch
+        {
+            "hashnames": [
+                "AK-47 | Redline (Field-Tested)",
+                "AWP | Asiimov (Field-Tested)"
+            ]
+        }
     """
-    return await get_item_price(hashname)
+    try:
+        if not request.hashnames or len(request.hashnames) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": "invalid_request",
+                    "message": "hashnames list cannot be empty"
+                }
+            )
+        
+        if len(request.hashnames) > 100:  # Limit batch size
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": "batch_too_large",
+                    "message": "Maximum 100 items per batch"
+                }
+            )
+        
+        result = fetch_batch_price(request.hashnames)
+        
+        # Check if there's an error in the result
+        if isinstance(result, dict):
+            if result.get('error'):
+                raise HTTPException(
+                    status_code=400 if result['error'] == 'no_api_key' else 500,
+                    detail=result
+                )
+            elif result.get('success') == False:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "success": False,
+                        "error": "steamdt_error",
+                        "message": result.get('errorMsg', 'SteamDT API error'),
+                        "errorCode": result.get('errorCode')
+                    }
+                )
+            elif result.get('success') == True:
+                return {
+                    "success": True,
+                    "data": result.get('data')
+                }
+        
+        # Fallback
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": "fetch_failed",
+                "message": str(e)
+            }
+        )

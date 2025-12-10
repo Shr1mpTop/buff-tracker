@@ -68,6 +68,7 @@ async def root():
             "status": "/api/status",
             "quota": "/api/quota",
             "price": "/api/price/{hashname}",
+            "price_batch": "/api/price/batch",
             "search": "/api/search?name={query}&num={limit}"
         }
     }
