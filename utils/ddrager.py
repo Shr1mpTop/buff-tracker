@@ -32,7 +32,7 @@ def request_api_key() -> str:
         str: API key or None if no available keys
     """
     result = subprocess.run(
-        ['python', 'utils/api-manager.py', '--request-key', ENDPOINT_NAME],
+        ['python', 'utils/api-manager.py', 'request', '--endpoint', ENDPOINT_NAME],
         capture_output=True,
         text=True,
         cwd=Path(__file__).parent.parent
@@ -44,19 +44,17 @@ def request_api_key() -> str:
     return None
 
 
-def notify_api_usage(api_key: str, success: bool):
+def rollback_api_usage(api_key: str):
     """
-    Notify api-manager about API call result for quota tracking
+    Notify api-manager about a failed API call to rollback quota
     
     Args:
         api_key: The API key that was used
-        success: Whether the API call succeeded
     """
     subprocess.run(
-        ['python', 'utils/api-manager.py', '--notify-usage', 
+        ['python', 'utils/api-manager.py', 'rollback', 
          '--endpoint', ENDPOINT_NAME,
-         '--api-key', api_key,
-         '--success' if success else '--failed'],
+         '--api_key', api_key],
         capture_output=True,
         cwd=Path(__file__).parent.parent
     )
@@ -99,25 +97,21 @@ def fetch_price(hashname: str) -> dict:
         
         success = response.status_code == 200
         
-        # Step 3: Notify api-manager about result
-        notify_api_usage(api_key, success)
-        
-        if success:
-            return response.json()
-        else:
-            return {
-                "error": f"HTTP {response.status_code}",
-                "message": response.text
-            }
+        if not success:
+            # Rollback quota on failure
+            rollback_api_usage(api_key)
             
-    except requests.exceptions.Timeout:
-        notify_api_usage(api_key, False)
-        return {"error": "timeout", "message": "Request timeout"}
-    except requests.exceptions.RequestException as e:
-        notify_api_usage(api_key, False)
-        return {"error": "request_failed", "message": str(e)}
+        return response.json()
+        
+    except requests.RequestException as e:
+        # Rollback quota on network errors or timeouts
+        rollback_api_usage(api_key)
+        return {
+            "error": "request_failed",
+            "message": str(e)
+        }
     except Exception as e:
-        notify_api_usage(api_key, False)
+        rollback_api_usage(api_key)
         return {"error": "unexpected", "message": str(e)}
 
 

@@ -9,11 +9,10 @@ Supports multiple API endpoints with different rate limits.
 
 import sys
 import argparse
-import csv
-import os
 from datetime import datetime
-from pathlib import Path
+import os
 from dotenv import load_dotenv
+from . import db_manager  # Import the new DB manager
 
 # Load environment variables
 load_dotenv()
@@ -42,94 +41,6 @@ def get_current_day():
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def load_quota(quota_file="api_quota.csv"):
-    """Load quota information from CSV file"""
-    quota_cache = {}
-    quota_path = Path(quota_file)
-    
-    if not quota_path.exists():
-        return quota_cache
-    
-    try:
-        with open(quota_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                api_key = row['api_key']
-                
-                # Load price_single quota
-                price_remaining = int(row.get('price_remaining', 60))
-                price_minute = row.get('price_minute', '')
-                
-                # Load base quota
-                base_remaining = int(row.get('base_remaining', 1))
-                base_day = row.get('base_day', '')
-                
-                quota_cache[api_key] = {
-                    'price_single': {
-                        'remaining_quota': price_remaining,
-                        'minute_timestamp': price_minute
-                    },
-                    'base': {
-                        'remaining_quota': base_remaining,
-                        'day_timestamp': base_day
-                    }
-                }
-    except Exception as e:
-        pass
-    
-    return quota_cache
-
-
-def save_quota(quota_cache, quota_file="api_quota.csv"):
-    """Save quota information to CSV file"""
-    try:
-        with open(quota_file, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                'api_key', 
-                'price_remaining', 'price_minute',
-                'base_remaining', 'base_day'
-            ])
-            
-            for api_key, info in quota_cache.items():
-                writer.writerow([
-                    api_key,
-                    info['price_single']['remaining_quota'],
-                    info['price_single']['minute_timestamp'],
-                    info['base']['remaining_quota'],
-                    info['base']['day_timestamp']
-                ])
-    except Exception as e:
-        pass
-
-
-def initialize_all_keys(quota_file="api_quota.csv"):
-    """Initialize quota for all API keys from .env"""
-    api_keys = get_api_keys()
-    if not api_keys:
-        return
-    
-    quota_cache = load_quota(quota_file)
-    current_minute = get_current_minute()
-    current_day = get_current_day()
-    
-    # Ensure all keys are in the cache
-    for api_key in api_keys:
-        if api_key not in quota_cache:
-            quota_cache[api_key] = {
-                'price_single': {
-                    'remaining_quota': 60,
-                    'minute_timestamp': current_minute
-                },
-                'base': {
-                    'remaining_quota': 1,
-                    'day_timestamp': current_day
-                }
-            }
-    
-    save_quota(quota_cache, quota_file)
-
-
 def get_api_keys():
     """Get API keys from environment"""
     api_keys_str = os.getenv('API_KEYS', '')
@@ -138,343 +49,156 @@ def get_api_keys():
     return []
 
 
-def request_and_allocate_key(endpoint: str, quota_file="api_quota.csv") -> str:
+def request_and_allocate_key(endpoint: str) -> str:
     """
     Service interface: Allocate best API key for data layer request
     Also decrements quota for the allocated key
     
     Args:
         endpoint: API endpoint name ('price_single' or 'base')
-        quota_file: Path to quota CSV file
         
     Returns:
         str: Allocated API key or None if no available keys
     """
-    # Initialize if needed
-    initialize_all_keys(quota_file)
+    db_manager.initialize_database()  # Ensure DB is initialized
     
-    quota_cache = load_quota(quota_file)
-    api_keys = get_api_keys()
-    
+    conn = db_manager.get_db_connection()
+    cursor = conn.cursor()
+
     if endpoint not in RATE_LIMITS:
         return None
-    
+
     rate_config = RATE_LIMITS[endpoint]
     rate_limit = rate_config['limit']
     
-    if not api_keys:
-        return None
-    
-    # Get current timestamp based on period
     if rate_config['period'] == 'minute':
         current_timestamp = get_current_minute()
-        timestamp_key = 'minute_timestamp'
+        quota_field = 'price_single_quota'
+        timestamp_field = 'price_single_timestamp'
     else:  # day
         current_timestamp = get_current_day()
-        timestamp_key = 'day_timestamp'
+        quota_field = 'base_quota'
+        timestamp_field = 'base_timestamp'
+
+    # Reset quotas for keys where the timestamp is outdated
+    cursor.execute(f"SELECT api_key, {timestamp_field} FROM api_keys")
+    keys_to_reset = [row['api_key'] for row in cursor.fetchall() if row[timestamp_field] != current_timestamp]
     
-    # Find best key and allocate
-    best_key = None
-    max_quota = -1
-    
-    for api_key in api_keys:
-        # Initialize if not in cache
-        if api_key not in quota_cache:
-            quota_cache[api_key] = {
-                'price_single': {
-                    'remaining_quota': 60,
-                    'minute_timestamp': get_current_minute()
-                },
-                'base': {
-                    'remaining_quota': 1,
-                    'day_timestamp': get_current_day()
-                }
-            }
-        
-        if endpoint in quota_cache[api_key]:
-            quota_info = quota_cache[api_key][endpoint]
-            
-            # Reset quota if time period changed
-            if quota_info.get(timestamp_key) != current_timestamp:
-                quota_info['remaining_quota'] = rate_limit
-                quota_info[timestamp_key] = current_timestamp
-            
-            remaining = quota_info['remaining_quota']
-        else:
-            remaining = rate_limit
-        
-        if remaining > max_quota:
-            max_quota = remaining
-            best_key = api_key
-    
-    # Allocate key (decrement quota)
-    if best_key and max_quota > 0:
-        quota_cache[best_key][endpoint]['remaining_quota'] -= 1
-        save_quota(quota_cache, quota_file)
+    if keys_to_reset:
+        placeholders = ','.join('?' for _ in keys_to_reset)
+        cursor.execute(
+            f"UPDATE api_keys SET {quota_field} = ?, {timestamp_field} = ? WHERE api_key IN ({placeholders})",
+            (rate_limit, current_timestamp, *keys_to_reset)
+        )
+        conn.commit()
+
+    # Find the best key
+    cursor.execute(
+        f"SELECT api_key FROM api_keys WHERE {quota_field} > 0 ORDER BY {quota_field} DESC LIMIT 1"
+    )
+    result = cursor.fetchone()
+
+    if result:
+        best_key = result['api_key']
+        # Decrement quota
+        cursor.execute(
+            f"UPDATE api_keys SET {quota_field} = {quota_field} - 1 WHERE api_key = ?",
+            (best_key,)
+        )
+        conn.commit()
+        conn.close()
         return best_key
     
+    conn.close()
     return None
 
 
-def notify_usage_result(endpoint: str, api_key: str, success: bool, quota_file="api_quota.csv"):
+def update_quota_on_success(api_key: str, endpoint: str):
     """
-    Service interface: Receive notification from data layer about API call result
-    If failed, restore the quota (rollback allocation)
-    
-    Args:
-        endpoint: API endpoint name
-        api_key: The API key that was used
-        success: Whether the API call succeeded
-        quota_file: Path to quota CSV file
+    Service interface: Called by data layer on successful API call (no action needed for now)
     """
-    if not success:
-        # Rollback: restore quota if call failed
-        quota_cache = load_quota(quota_file)
-        
-        if api_key in quota_cache and endpoint in quota_cache[api_key]:
-            rate_limit = RATE_LIMITS[endpoint]['limit']
-            current_quota = quota_cache[api_key][endpoint]['remaining_quota']
-            
-            # Don't exceed rate limit
-            if current_quota < rate_limit:
-                quota_cache[api_key][endpoint]['remaining_quota'] += 1
-                save_quota(quota_cache, quota_file)
+    # With the new system, quota is decremented at allocation, so no action is needed here.
+    # We could add logging or other success tracking in the future.
+    pass
 
 
-def get_best_api_key(endpoint="price_single", quota_file="api_quota.csv"):
+def rollback_quota_on_failure(api_key: str, endpoint: str):
     """
-    Get the API key with the most remaining quota for specified endpoint
-    
-    Args:
-        endpoint: API endpoint name ('price_single' or 'base')
-        quota_file: Path to quota CSV file
-    
-    Returns:
-        str: Best API key or None if no available keys
+    Service interface: Called by data layer on failed API call to rollback quota
     """
-    quota_cache = load_quota(quota_file)
-    api_keys = get_api_keys()
+    conn = db_manager.get_db_connection()
+    cursor = conn.cursor()
     
     if endpoint not in RATE_LIMITS:
-        print(f"Unknown endpoint: {endpoint}", file=sys.stderr)
-        return None
-    
-    rate_config = RATE_LIMITS[endpoint]
-    rate_limit = rate_config['limit']
-    
-    if not api_keys:
-        return None
-    
-    best_key = None
-    max_quota = -1
-    
-    # Get current timestamp based on period
-    if rate_config['period'] == 'minute':
-        current_timestamp = get_current_minute()
-        timestamp_key = 'minute_timestamp'
-    else:  # day
-        current_timestamp = get_current_day()
-        timestamp_key = 'day_timestamp'
-    
-    for api_key in api_keys:
-        if api_key in quota_cache and endpoint in quota_cache[api_key]:
-            quota_info = quota_cache[api_key][endpoint]
-            
-            # If timestamp doesn't match, quota is restored
-            if quota_info.get(timestamp_key) != current_timestamp:
-                remaining = rate_limit
-            else:
-                remaining = quota_info['remaining_quota']
-        else:
-            remaining = rate_limit
-        
-        if remaining > max_quota:
-            max_quota = remaining
-            best_key = api_key
-    
-    return best_key if max_quota > 0 else None
-
-
-def display_quota(api_key=None, endpoint=None):
-    """
-    Display quota for specific API key or all keys
-    
-    Args:
-        api_key: Specific API key to display (None for all)
-        endpoint: Specific endpoint to display (None for all)
-    """
-    quota_cache = load_quota()
-    api_keys = get_api_keys()
-    current_minute = get_current_minute()
-    current_day = get_current_day()
-    
-    if not api_keys:
-        print("No API keys found")
+        conn.close()
         return
-    
-    if api_key:
-        # Display specific key
-        if api_key not in api_keys:
-            print(f"API key not found in .env")
-            return
-        
-        if api_key not in quota_cache:
-            print(f"No quota data for this API key")
-            return
-        
-        print(f"API Key: {api_key[:8]}...{api_key[-4:]}")
-        print()
-        
-        quota_info = quota_cache[api_key]
-        
-        # Display price_single quota
-        if not endpoint or endpoint == "price_single":
-            price_info = quota_info.get('price_single', {})
-            price_minute = price_info.get('minute_timestamp', '')
-            if price_minute != current_minute:
-                price_remaining = 60
-            else:
-                price_remaining = price_info.get('remaining_quota', 60)
-            print(f"Price Single: {price_remaining}/60 (per minute)")
-        
-        # Display base quota
-        if not endpoint or endpoint == "base":
-            base_info = quota_info.get('base', {})
-            base_day = base_info.get('day_timestamp', '')
-            if base_day != current_day:
-                base_remaining = 1
-            else:
-                base_remaining = base_info.get('remaining_quota', 1)
-            print(f"Base Info:    {base_remaining}/1  (per day)")
-    else:
-        # Display all keys
-        print(f"{'API Key':<20} {'Price (min)':<15} {'Base (day)':<15}")
-        print("=" * 50)
-        
-        for key in api_keys:
-            masked_key = f"{key[:8]}...{key[-4:]}"
-            
-            if key in quota_cache:
-                quota_info = quota_cache[key]
-                
-                # Price quota
-                price_info = quota_info.get('price_single', {})
-                price_minute = price_info.get('minute_timestamp', '')
-                if price_minute != current_minute:
-                    price_remaining = 60
-                else:
-                    price_remaining = price_info.get('remaining_quota', 60)
-                
-                # Base quota
-                base_info = quota_info.get('base', {})
-                base_day = base_info.get('day_timestamp', '')
-                if base_day != current_day:
-                    base_remaining = 1
-                else:
-                    base_remaining = base_info.get('remaining_quota', 1)
-                
-                print(f"{masked_key:<20} {price_remaining:>2}/60         {base_remaining:>1}/1")
-            else:
-                print(f"{masked_key:<20} {'60/60':<15} {'1/1':<15}")
 
+    if RATE_LIMITS[endpoint]['period'] == 'minute':
+        quota_field = 'price_single_quota'
+    else:
+        quota_field = 'base_quota'
+
+    cursor.execute(
+        f"UPDATE api_keys SET {quota_field} = {quota_field} + 1 WHERE api_key = ?",
+        (api_key,)
+    )
+    conn.commit()
+    conn.close()
+    
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='API Manager - Monitor and manage API key quota',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python utils/api-manager.py
-  python utils/api-manager.py --api-key YOUR_KEY
-  python utils/api-manager.py --init
-  python utils/api-manager.py --best
-        """
-    )
-    
+    """Main function for CLI tool"""
+    parser = argparse.ArgumentParser(description="API Key Quota Manager")
     parser.add_argument(
-        '--api-key',
-        type=str,
-        help='Display quota for specific API key'
+        'action', 
+        choices=['request', 'rollback', 'show'], 
+        help="Action to perform. 'request' allocates a key, 'rollback' restores quota on failure, 'show' displays current quotas."
     )
-    
-    parser.add_argument(
-        '--init',
-        action='store_true',
-        help='Initialize all API keys in quota file'
-    )
-    
-    parser.add_argument(
-        '--best',
-        type=str,
-        choices=['price_single', 'base'],
-        help='Get the best API key for specified endpoint'
-    )
-    
-    parser.add_argument(
-        '--endpoint',
-        type=str,
-        choices=['price_single', 'base'],
-        help='Filter by specific endpoint'
-    )
-    
-    parser.add_argument(
-        '--request-key',
-        type=str,
-        choices=['price_single', 'base'],
-        help='Service interface: Request and allocate best API key for endpoint'
-    )
-    
-    parser.add_argument(
-        '--notify-usage',
-        action='store_true',
-        help='Service interface: Notify about API call result (requires --endpoint, --api-key, --success/--failed)'
-    )
-    
-    parser.add_argument(
-        '--success',
-        action='store_true',
-        help='API call succeeded (used with --notify-usage)'
-    )
-    
-    parser.add_argument(
-        '--failed',
-        action='store_true',
-        help='API call failed (used with --notify-usage)'
-    )
+    parser.add_argument('--endpoint', type=str, help="API endpoint (e.g., 'price_single' or 'base')")
+    parser.add_argument('--api_key', type=str, help="API key to rollback quota for")
     
     args = parser.parse_args()
-    
-    # Service interfaces for data layer
-    if args.request_key:
-        key = request_and_allocate_key(endpoint=args.request_key)
-        if key:
-            print(key)
-            sys.exit(0)
-        else:
-            sys.exit(1)
-    
-    if args.notify_usage:
-        if not args.endpoint or not args.api_key:
-            print("Error: --notify-usage requires --endpoint and --api-key", file=sys.stderr)
-            sys.exit(1)
-        
-        success = args.success and not args.failed
-        notify_usage_result(args.endpoint, args.api_key, success)
-        sys.exit(0)
-    
-    # Original interfaces
-    if args.init:
-        initialize_all_keys()
-        print("✓ Initialized quota for all API keys")
-    elif args.best:
-        best_key = get_best_api_key(endpoint=args.best)
-        if best_key:
-            print(best_key)
-        else:
-            sys.exit(1)
-    else:
-        display_quota(api_key=args.api_key, endpoint=args.endpoint)
 
+    if args.action == 'request':
+        if not args.endpoint:
+            print("Error: --endpoint is required for the 'request' action.", file=sys.stderr)
+            sys.exit(1)
+        allocated_key = request_and_allocate_key(args.endpoint)
+        if allocated_key:
+            print(allocated_key)  # Output just the key for scripting
+        else:
+            print("No available API key for this endpoint.", file=sys.stderr)
+            sys.exit(1)
 
-if __name__ == "__main__":
+    elif args.action == 'rollback':
+        if not args.api_key or not args.endpoint:
+            print("Error: --api_key and --endpoint are required for the 'rollback' action.", file=sys.stderr)
+            sys.exit(1)
+        rollback_quota_on_failure(args.api_key, args.endpoint)
+        print(f"Rolled back quota for key {args.api_key} on endpoint {args.endpoint}.")
+
+    elif args.action == 'show':
+        db_manager.initialize_database()
+        conn = db_manager.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM api_keys ORDER BY api_key")
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            print("No API keys found in the database.")
+            return
+
+        print(f"{'API Key':<50} {'Price Quota':<15} {'Price Minute':<20} {'Base Quota':<15} {'Base Day':<20}")
+        print("-" * 120)
+        for row in rows:
+            print(
+                f"{row['api_key']:<50} "
+                f"{row['price_single_quota']:<15} "
+                f"{row['price_single_timestamp']:<20} "
+                f"{row['base_quota']:<15} "
+                f"{row['base_timestamp']:<20}"
+            )
+
+if __name__ == '__main__':
     main()
