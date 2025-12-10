@@ -2,13 +2,16 @@
 # -*- coding: utf-8 -*-
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DB_FILE = Path(__file__).parent.parent / "api_quota.db"
+
+# Beijing timezone (UTC+8)
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 def get_db_connection():
     """Create a database connection to the SQLite database."""
@@ -39,8 +42,8 @@ def initialize_database():
     api_keys_str = os.getenv("API_KEYS", "")
     if api_keys_str:
         api_keys = [key.strip() for key in api_keys_str.split(',') if key.strip()]
-        current_minute = datetime.now().strftime("%Y-%m-%d %H:%M")
-        current_day = datetime.now().strftime("%Y-%m-%d")
+        current_minute = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+        current_day = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
         for key in api_keys:
             cursor.execute(
                 "INSERT INTO api_keys (api_key, price_single_timestamp, price_batch_timestamp, base_timestamp) VALUES (?, ?, ?, ?)",

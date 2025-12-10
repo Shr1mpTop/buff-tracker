@@ -12,12 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 import sys
+import threading
+import time
 from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.routers import price, search, health, quota
+from utils.api_manager import reset_expired_quotas
 
 
 # Create FastAPI application
@@ -88,6 +91,11 @@ async def global_exception_handler(request, exc):
             "message": str(exc)
         }
     )
+
+
+# Start quota reset background task
+quota_thread = threading.Thread(target=reset_expired_quotas, daemon=True)
+quota_thread.start()
 
 
 # Run the application

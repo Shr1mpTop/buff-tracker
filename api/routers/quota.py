@@ -25,20 +25,32 @@ async def get_quota():
         cursor = conn.cursor()
         
         # Query all API keys and their quotas
-        cursor.execute("SELECT api_key, price_single_quota, price_single_timestamp FROM api_keys")
+        cursor.execute("SELECT api_key, price_single_quota, price_batch_quota, base_quota, price_single_timestamp FROM api_keys")
         rows = cursor.fetchall()
         
         if not rows:
             return {
                 "success": False,
                 "error": "no_api_keys_found",
-                "remaining": 0,
-                "total": 0
+                "single_remaining": 0,
+                "single_total": 0,
+                "batch_remaining": 0,
+                "batch_total": 0,
+                "base_remaining": 0,
+                "base_total": 0
             }
         
-        # Calculate total remaining quota from all API keys
-        total_remaining = sum(row['price_single_quota'] for row in rows)
-        total_quota = len(rows) * 60  # Each key has 60 requests per minute
+        num_keys = len(rows)
+        
+        # Calculate totals
+        single_remaining = sum(row['price_single_quota'] for row in rows)
+        single_total = num_keys * 60
+        
+        batch_remaining = sum(row['price_batch_quota'] for row in rows)
+        batch_total = num_keys * 1
+        
+        base_remaining = sum(row['base_quota'] for row in rows)
+        base_total = num_keys * 1
         
         # Get latest timestamp
         current_minute = max((row['price_single_timestamp'] for row in rows if row['price_single_timestamp']), default='')
@@ -47,8 +59,12 @@ async def get_quota():
         
         return {
             "success": True,
-            "remaining": total_remaining,
-            "total": total_quota,
+            "single_remaining": single_remaining,
+            "single_total": single_total,
+            "batch_remaining": batch_remaining,
+            "batch_total": batch_total,
+            "base_remaining": base_remaining,
+            "base_total": base_total,
             "timestamp": current_minute
         }
         
@@ -56,6 +72,10 @@ async def get_quota():
         return {
             "success": False,
             "error": str(e),
-            "remaining": 0,
-            "total": 60
+            "single_remaining": 0,
+            "single_total": 0,
+            "batch_remaining": 0,
+            "batch_total": 0,
+            "base_remaining": 0,
+            "base_total": 0
         }

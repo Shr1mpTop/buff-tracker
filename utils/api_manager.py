@@ -9,13 +9,17 @@ Supports multiple API endpoints with different rate limits.
 
 import sys
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import os
+import time
 from dotenv import load_dotenv
 from . import db_manager  # Import the new DB manager
 
 # Load environment variables
 load_dotenv()
+
+# Beijing timezone (UTC+8)
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 # API endpoint rate limits
@@ -36,13 +40,13 @@ RATE_LIMITS = {
 
 
 def get_current_minute():
-    """Get current minute timestamp"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
+    """Get current minute timestamp in Beijing timezone"""
+    return datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
 
 
 def get_current_day():
-    """Get current day timestamp"""
-    return datetime.now().strftime("%Y-%m-%d")
+    """Get current day timestamp in Beijing timezone"""
+    return datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 
 
 def get_api_keys():
@@ -156,8 +160,44 @@ def rollback_quota_on_failure(api_key: str, endpoint: str):
     conn.close()
     
 
-def main():
-    """Main function for CLI tool"""
+def reset_expired_quotas():
+    """
+    Reset expired quotas for all API keys
+    """
+    while True:
+        try:
+            conn = db_manager.get_db_connection()
+            cursor = conn.cursor()
+            
+            current_minute = get_current_minute()
+            current_day = get_current_day()
+            
+            # Reset price_single quotas if minute changed
+            cursor.execute(
+                "UPDATE api_keys SET price_single_quota = ?, price_single_timestamp = ? WHERE price_single_timestamp != ?",
+                (RATE_LIMITS['price_single']['limit'], current_minute, current_minute)
+            )
+            
+            # Reset price_batch quotas if minute changed
+            cursor.execute(
+                "UPDATE api_keys SET price_batch_quota = ?, price_batch_timestamp = ? WHERE price_batch_timestamp != ?",
+                (RATE_LIMITS['price_batch']['limit'], current_minute, current_minute)
+            )
+            
+            # Reset base quotas if day changed
+            cursor.execute(
+                "UPDATE api_keys SET base_quota = ?, base_timestamp = ? WHERE base_timestamp != ?",
+                (RATE_LIMITS['base']['limit'], current_day, current_day)
+            )
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            print(f"Error resetting quotas: {e}")
+        
+        # Check every 30 seconds
+        time.sleep(30)
     parser = argparse.ArgumentParser(description="API Key Quota Manager")
     parser.add_argument(
         'action', 
