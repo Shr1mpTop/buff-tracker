@@ -1,5 +1,5 @@
 # Use an official lightweight Python image.
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -23,4 +23,4 @@ COPY . .
 EXPOSE 8010
 
 # Use the python from the venv to run uvicorn as a module
-CMD ["/app/.venv/bin/python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8010", "--reload"]
+CMD ["/bin/bash", "-c", "source /app/.venv/bin/activate && python -m uvicorn api.main:app --host 0.0.0.0 --port 8010 --reload"]

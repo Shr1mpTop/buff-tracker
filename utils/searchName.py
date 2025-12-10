@@ -35,6 +35,8 @@ def get_db_connection():
             user=os.getenv('DB_USER'),
             password=os.getenv('DB_PASSWORD'),
             connection_timeout=10,
+            charset='utf8mb4',
+            collation='utf8mb4_unicode_ci',
             use_pure=True
         )
         return connection
@@ -112,8 +114,12 @@ def fuzzy_search_items(query: str, limit: int = 10) -> list:
         
         results = cursor.fetchall()
         
-        # Remove relevance score from output
+        # Ensure proper encoding for Chinese characters
         for item in results:
+            for key, value in item.items():
+                if isinstance(value, str):
+                    # Ensure string is properly encoded as UTF-8
+                    item[key] = value.encode('utf-8').decode('utf-8')
             item.pop('relevance', None)
         
         cursor.close()
