@@ -7,7 +7,6 @@ __pycache__/
 *$py.class
 
 # data files
-api_quota.csv
 api_quota.db
 cs2_kinds_cache.json
 

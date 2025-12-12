@@ -7,4 +7,3 @@ services:
       - .env
     volumes:
       - .:/app
-      - /app/.venv
