@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir --index-url https://pypi.tuna.tsinghua.edu.cn/sim
 COPY . .
 
 # Expose the port the app runs on
-EXPOSE 8010
+EXPOSE 8001
 
 # Use the python from the venv to run uvicorn as a module
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8010", "--reload"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
