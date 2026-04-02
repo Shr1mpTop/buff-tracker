@@ -72,6 +72,7 @@ async def root():
             "quota": "/api/quota",
             "price": "/api/price/{hashname}",
             "price_batch": "/api/price/batch",
+            "kline_data": "/api/item/kline-data/{market_hash_name}?platform={platform}&type_day={type_day}",
             "search": "/api/search?name={query}&num={limit}"
         }
     }

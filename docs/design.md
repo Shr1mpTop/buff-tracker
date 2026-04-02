@@ -31,3 +31,14 @@ for recipient in recipients:
     # 关闭连接
     server.quit()
 ```
+
+# 有用的可以开发的接口
+
+接口 方法 参数 用途
+/user/skin/v1/item GET timestamp 饰品基础信息
+/user/skin/v1/current-sell GET timestamp, itemId 当前在售列表
+/user/skin/v1/market-comparsion GET itemId, platform, typeDay, dateType 各平台价格对比
+/item/trade/v1/overview/today GET timestamp, itemId 今日交易概览
+/user/skin/v1/sale-wear-detail GET timestamp 磨损销售分布
+/user/collect/skin/v1/expect-info GET timestamp, itemId 期望价格信息
+/user/skin/v2/asset/wear-rank GET timestamp 磨损排行

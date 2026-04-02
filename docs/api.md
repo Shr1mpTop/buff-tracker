@@ -48,6 +48,7 @@ docker-compose up -d
 检查服务运行状态
 
 **响应示例:**
+
 ```json
 {
   "status": "healthy",
@@ -62,6 +63,7 @@ docker-compose up -d
 获取详细系统状态
 
 **响应示例:**
+
 ```json
 {
   "status": "operational",
@@ -92,14 +94,17 @@ docker-compose up -d
 根据 Steam 市场 Hash 名称获取饰品价格
 
 **路径参数:**
+
 - `hashname` (string, required): Steam 市场 Hash 名称
 
 **请求示例:**
+
 ```bash
 GET /api/price/AK-47 | Redline (Field-Tested)
 ```
 
 **响应示例:**
+
 ```json
 {
   "success": true,
@@ -131,7 +136,73 @@ GET /api/price/AK-47 | Redline (Field-Tested)
 查询参数版本的价格查询
 
 **查询参数:**
+
 - `hashname` (string, required): Steam 市场 Hash 名称
+
+---
+
+#### `GET /api/item/kline-data/{market_hash_name}`
+
+获取指定饰品在特定平台上的历史价格趋势数据（K 线聚合）。
+
+内部使用无头浏览器访问 steamdt.com，拦截页面对 `/user/steam/type-trend/v2/item/details` 的原生 POST 请求并替换参数（绕过阿里云 WAF JS 挑战），首次请求约耗时 10–20 秒。
+
+**路径参数:**
+
+| 参数       | 类型   | 必填 | 说明                                                   |
+| ---------- | ------ | ---- | ------------------------------------------------------ |
+| `hashname` | string | ✅   | Steam 市场哈希名称，含空格/竖线等特殊字符时须 URL 编码 |
+
+**查询参数:**
+
+| 参数        | 类型    | 必填 | 默认值  | 可选值                       | 说明                         |
+| ----------- | ------- | ---- | ------- | ---------------------------- | ---------------------------- |
+| `platform`  | string  | ❌   | `STEAM` | `STEAM` `YOUPIN` `BUFF` `C5` | 目标平台标识符               |
+| `type_day`  | string  | ❌   | `5`     | `1` `3` `5` `7` `14` `30`    | K 线聚合周期（天）           |
+| `date_type` | integer | ❌   | `3`     | `3`                          | 日期范围类型（3 = 全量历史） |
+
+**请求示例:**
+
+```bash
+# YOUPIN 平台，5 天聚合，全量历史
+GET /api/item/kline-data/M4A4%20%7C%20Buzz%20Kill%20(Factory%20New)?platform=YOUPIN&type_day=5
+
+# BUFF 平台，1 天聚合
+GET /api/item/kline-data/AK-47%20%7C%20Redline%20(Field-Tested)?platform=BUFF&type_day=1
+```
+
+**PowerShell 测试:**
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/item/kline-data/M4A4%20%7C%20Buzz%20Kill%20(Factory%20New)?platform=YOUPIN&type_day=5" | ConvertTo-Json -Depth 3
+```
+
+**响应示例:**
+
+```json
+{
+  "success": true,
+  "data": [
+    ["1766505559", 6966.0, 1020, 6830.0, 63, 214656.53, 30, "25690"],
+    ["1766591959", 6149.0, 1064, 6090.0, 54, 361002.26, 54, "25705"]
+  ]
+}
+```
+
+**data 数组字段说明（每条记录为数组，按索引）:**
+
+| 索引 | 描述                      |
+| ---- | ------------------------- |
+| 0    | 时间戳（Unix 秒，字符串） |
+| 1    | 最高价（CNY）             |
+| 2    | 成交量                    |
+| 3    | 最低价（CNY）             |
+| 4    | 成交笔数                  |
+| 5    | 成交额（CNY）             |
+| 6    | 未知字段                  |
+| 7    | 未知字段                  |
+
+**Swagger UI 测试入口:** `http://localhost:8000/docs` → `GET /api/item/kline-data/{market_hash_name}`
 
 ---
 
@@ -142,16 +213,19 @@ GET /api/price/AK-47 | Redline (Field-Tested)
 模糊搜索 CS2 饰品
 
 **查询参数:**
+
 - `name` (string, required): 搜索关键词（支持中英文）
 - `num` (integer, optional): 返回结果数量，默认 10，范围 1-100
 
 **请求示例:**
+
 ```bash
 GET /api/search?name=AK-47&num=5
 GET /api/search?name=红线&num=10
 ```
 
 **响应示例:**
+
 ```json
 {
   "success": true,
@@ -176,15 +250,18 @@ GET /api/search?name=红线&num=10
 自动补全建议（用于前端输入框）
 
 **查询参数:**
+
 - `q` (string, required): 查询字符串
 - `limit` (integer, optional): 建议数量，默认 5，范围 1-20
 
 **请求示例:**
+
 ```bash
 GET /api/search/suggest?q=AK&limit=5
 ```
 
 **响应示例:**
+
 ```json
 {
   "success": true,
@@ -214,12 +291,14 @@ GET /api/search/suggest?q=AK&limit=5
 ```
 
 **常见错误码:**
+
 - `no_api_key`: 没有可用的 API 密钥
 - `fetch_failed`: 数据获取失败
 - `search_failed`: 搜索失败
 - `internal_server_error`: 服务器内部错误
 
 **HTTP 状态码:**
+
 - `200`: 成功
 - `400`: 请求参数错误
 - `404`: 资源未找到
@@ -230,6 +309,7 @@ GET /api/search/suggest?q=AK&limit=5
 ## CORS 配置
 
 API 允许以下来源跨域访问：
+
 - `https://hezhili.online`
 - `https://www.hezhili.online`
 - `http://localhost:3000` (开发环境)
@@ -245,7 +325,7 @@ API 允许以下来源跨域访问：
 // 搜索饰品
 async function searchItems(query) {
   const response = await fetch(
-    `https://api.hezhili.online/cs2/search?name=${encodeURIComponent(query)}&num=10`
+    `https://api.hezhili.online/cs2/search?name=${encodeURIComponent(query)}&num=10`,
   );
   const data = await response.json();
   return data;
@@ -254,7 +334,7 @@ async function searchItems(query) {
 // 获取价格
 async function getPrice(hashname) {
   const response = await fetch(
-    `https://api.hezhili.online/cs2/price/${encodeURIComponent(hashname)}`
+    `https://api.hezhili.online/cs2/price/${encodeURIComponent(hashname)}`,
   );
   const data = await response.json();
   return data;
@@ -264,31 +344,31 @@ async function getPrice(hashname) {
 ### React 示例
 
 ```jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 function CS2PriceTracker() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState([]);
-  
+
   const handleSearch = async () => {
     const response = await fetch(
-      `https://api.hezhili.online/cs2/search?name=${searchQuery}&num=10`
+      `https://api.hezhili.online/cs2/search?name=${searchQuery}&num=10`,
     );
     const data = await response.json();
     setResults(data.data);
   };
-  
+
   return (
     <div>
-      <input 
-        value={searchQuery} 
+      <input
+        value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         placeholder="搜索饰品..."
       />
       <button onClick={handleSearch}>搜索</button>
-      
+
       <div>
-        {results.map(item => (
+        {results.map((item) => (
           <div key={item.id}>{item.market_hash_name}</div>
         ))}
       </div>
