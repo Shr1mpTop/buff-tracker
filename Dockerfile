@@ -34,7 +34,11 @@ RUN pip install --no-cache-dir --index-url https://pypi.tuna.tsinghua.edu.cn/sim
     uvicorn[standard] \
     pydantic \
     click \
-    typing-extensions
+    typing-extensions \
+    playwright
+
+# Install browser binaries required by Playwright
+RUN playwright install --with-deps chromium
 
 
 # Now copy the rest of the application code
