@@ -2,10 +2,10 @@
 
 ## Roadmap
 
-1. 首先，通过检索关键词找到相关饰品的 hashName，相当于绑定到了唯一的饰品 【完成】
-2. 后端系统，就是不同层级管理，简单调用方法，直接返回想要的结果，中间复杂的过程是看不见的，处理好了
-3. fastapi，输入 hashname，返回输出饰品价格
-4. 追踪饰品，持续记录饰品价格
+1. ~~首先，通过检索关键词找到相关饰品的 hashName，相当于绑定到了唯一的饰品 【完成】~~
+2. ~~后端系统，就是不同层级管理，简单调用方法，直接返回想要的结果，中间复杂的过程是看不见的，处理好了~~
+3. ~~fastapi，输入 hashname，返回输出饰品价格~~
+4. ~~追踪饰品，持续记录饰品价格~~
 5. 在输入框里面输入电子邮件地址，发送饰品报告
 
 ## 邮箱发送功能
@@ -42,3 +42,4 @@ for recipient in recipients:
 /user/skin/v1/sale-wear-detail GET timestamp 磨损销售分布
 /user/collect/skin/v1/expect-info GET timestamp, itemId 期望价格信息
 /user/skin/v2/asset/wear-rank GET timestamp 磨损排行
+/open/cs2/item/v1/kline POST marketHashName, type, platform, specialStyle 饰品K线数据（已接入 ✅）

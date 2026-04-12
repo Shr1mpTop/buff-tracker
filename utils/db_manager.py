@@ -35,7 +35,9 @@ def initialize_database():
         price_batch_quota INTEGER DEFAULT 1,
         price_batch_timestamp TEXT,
         base_quota INTEGER DEFAULT 1,
-        base_timestamp TEXT
+        base_timestamp TEXT,
+        kline_quota INTEGER DEFAULT 120,
+        kline_timestamp TEXT
     )
     """)
 
@@ -46,9 +48,32 @@ def initialize_database():
         current_day = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
         for key in api_keys:
             cursor.execute(
-                "INSERT INTO api_keys (api_key, price_single_timestamp, price_batch_timestamp, base_timestamp) VALUES (?, ?, ?, ?)",
-                (key, current_minute, current_minute, current_day)
+                "INSERT INTO api_keys (api_key, price_single_timestamp, price_batch_timestamp, base_timestamp, kline_timestamp) VALUES (?, ?, ?, ?, ?)",
+                (key, current_minute, current_minute, current_day, current_minute)
             )
+
+    conn.commit()
+    conn.close()
+
+
+def migrate_database():
+    """Add new columns to existing database tables."""
+    if not DB_FILE.exists():
+        return
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Check if kline_quota column exists
+    cursor.execute("PRAGMA table_info(api_keys)")
+    columns = [row['name'] for row in cursor.fetchall()]
+
+    if 'kline_quota' not in columns:
+        cursor.execute("ALTER TABLE api_keys ADD COLUMN kline_quota INTEGER DEFAULT 60")
+    if 'kline_timestamp' not in columns:
+        current_minute = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+        cursor.execute("ALTER TABLE api_keys ADD COLUMN kline_timestamp TEXT")
+        cursor.execute(f"UPDATE api_keys SET kline_timestamp = '{current_minute}'")
 
     conn.commit()
     conn.close()

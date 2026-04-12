@@ -14,6 +14,7 @@ import os
 import time
 from dotenv import load_dotenv
 from . import db_manager  # Import the new DB manager
+from .db_manager import migrate_database
 
 # Load environment variables
 load_dotenv()
@@ -35,6 +36,10 @@ RATE_LIMITS = {
     "base": {
         "limit": 1,
         "period": "day"  # 1 request per day
+    },
+    "kline": {
+        "limit": 120,
+        "period": "minute"  # 120 requests per minute
     }
 }
 
@@ -69,6 +74,7 @@ def request_and_allocate_key(endpoint: str) -> str:
         str: Allocated API key or None if no available keys
     """
     db_manager.initialize_database()  # Ensure DB is initialized
+    migrate_database()  # Ensure new columns exist
     
     conn = db_manager.get_db_connection()
     cursor = conn.cursor()
@@ -87,6 +93,10 @@ def request_and_allocate_key(endpoint: str) -> str:
         current_timestamp = get_current_minute()
         quota_field = 'price_batch_quota'
         timestamp_field = 'price_batch_timestamp'
+    elif endpoint == 'kline':
+        current_timestamp = get_current_minute()
+        quota_field = 'kline_quota'
+        timestamp_field = 'kline_timestamp'
     else:  # base
         current_timestamp = get_current_day()
         quota_field = 'base_quota'
@@ -149,6 +159,8 @@ def rollback_quota_on_failure(api_key: str, endpoint: str):
         quota_field = 'price_single_quota'
     elif endpoint == 'price_batch':
         quota_field = 'price_batch_quota'
+    elif endpoint == 'kline':
+        quota_field = 'kline_quota'
     else:  # base
         quota_field = 'base_quota'
 
@@ -188,6 +200,12 @@ def reset_expired_quotas():
             cursor.execute(
                 "UPDATE api_keys SET base_quota = ?, base_timestamp = ? WHERE base_timestamp != ?",
                 (RATE_LIMITS['base']['limit'], current_day, current_day)
+            )
+
+            # Reset kline quotas if minute changed
+            cursor.execute(
+                "UPDATE api_keys SET kline_quota = ?, kline_timestamp = ? WHERE kline_timestamp != ?",
+                (RATE_LIMITS['kline']['limit'], current_minute, current_minute)
             )
             
             conn.commit()

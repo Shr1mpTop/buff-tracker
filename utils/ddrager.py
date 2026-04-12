@@ -30,9 +30,11 @@ API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/price/single"
 BATCH_API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/price/batch"
 BASE_API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/base"
 HISTORY_API_ENDPOINT = "https://api.steamdt.com/user/steam/type-trend/v2/item/details"
+KLINE_API_ENDPOINT = "https://open.steamdt.com/open/cs2/item/v1/kline"
 ENDPOINT_NAME = "price_single"
 BATCH_ENDPOINT_NAME = "price_batch"
 BASE_ENDPOINT_NAME = "base"
+KLINE_ENDPOINT_NAME = "kline"
 
 
 def request_api_key() -> str:
@@ -88,11 +90,31 @@ def request_base_api_key() -> str:
 def rollback_base_api_usage(api_key: str):
     """
     Notify api-manager about a failed base API call to rollback quota
-    
+
     Args:
         api_key: The API key that was used
     """
     rollback_quota_on_failure(api_key, BASE_ENDPOINT_NAME)
+
+
+def request_kline_api_key() -> str:
+    """
+    Request best available API key from api-manager for kline endpoint
+
+    Returns:
+        str: API key or None if no available keys
+    """
+    return request_and_allocate_key(KLINE_ENDPOINT_NAME)
+
+
+def rollback_kline_api_usage(api_key: str):
+    """
+    Notify api-manager about a failed kline API call to rollback quota
+
+    Args:
+        api_key: The API key that was used
+    """
+    rollback_quota_on_failure(api_key, KLINE_ENDPOINT_NAME)
 
 
 def fetch_base_info() -> dict:
@@ -135,6 +157,70 @@ def fetch_base_info() -> dict:
         }
     except Exception as e:
         rollback_base_api_usage(api_key)
+        return {"error": "unexpected", "message": str(e)}
+
+
+def fetch_kline_data(
+    market_hash_name: str,
+    kline_type: int = 2,
+    platform: str = None,
+    special_style: str = None,
+) -> dict:
+    """
+    Fetch K-line (candlestick) data for a CS2 item from SteamDT API.
+
+    Args:
+        market_hash_name: Steam market hash name (required)
+        kline_type: 1=hourly K, 2=daily K, 3=weekly K (required, default 2)
+        platform: Platform filter, e.g. ALL/BUFF/YOUPIN/C5/STEAM/HALOSKINS (optional)
+        special_style: Special style filter (optional)
+
+    Returns:
+        dict: API response data or error
+    """
+    api_key = request_kline_api_key()
+
+    if not api_key:
+        return {
+            "error": "no_api_key",
+            "message": "No available API key from api-manager"
+        }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "marketHashName": market_hash_name,
+        "type": kline_type,
+    }
+    if platform:
+        data["platform"] = platform
+    if special_style:
+        data["specialStyle"] = special_style
+
+    try:
+        response = requests.post(
+            KLINE_API_ENDPOINT,
+            headers=headers,
+            json=data,
+            timeout=15
+        )
+
+        if response.status_code != 200:
+            rollback_kline_api_usage(api_key)
+
+        return response.json()
+
+    except requests.RequestException as e:
+        rollback_kline_api_usage(api_key)
+        return {
+            "error": "request_failed",
+            "message": str(e)
+        }
+    except Exception as e:
+        rollback_kline_api_usage(api_key)
         return {"error": "unexpected", "message": str(e)}
 
 

@@ -19,7 +19,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.routers import price, search, health, quota, base
+from api.routers import price, search, health, quota, base, kline
 from utils.api_manager import reset_expired_quotas
 
 
@@ -54,6 +54,7 @@ app.include_router(price.router, prefix="/api", tags=["Price"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(quota.router, prefix="/api", tags=["Quota"])
 app.include_router(base.router, prefix="/api", tags=["Base"])
+app.include_router(kline.router, prefix="/api", tags=["Kline"])
 
 
 # Root endpoint
@@ -74,6 +75,7 @@ async def root():
             "price": "/api/price/{hashname}",
             "price_batch": "/api/price/batch",
             "kline_data": "/api/item/kline-data/{market_hash_name}?platform={platform}&type_day={type_day}",
+            "kline": "/api/kline/{market_hash_name}?type={type}&platform={platform}",
             "base": "/api/base",
             "search": "/api/search?name={query}&num={limit}"
         }

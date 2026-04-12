@@ -206,11 +206,84 @@ Invoke-RestMethod "http://localhost:8000/api/item/kline-data/M4A4%20%7C%20Buzz%2
 
 ---
 
-### 3. 饰品搜索
+### 3. 饰品K线数据（官方API）
+
+#### `GET /api/kline/{market_hash_name}`
+
+通过 SteamDT 官方 API 获取饰品K线（蜡烛图）数据。相比上面基于 Playwright 的方案，响应更快、更稳定。
+
+**路径参数:**
+
+| 参数                | 类型   | 必填 | 说明                                                   |
+| ------------------- | ------ | ---- | ------------------------------------------------------ |
+| `market_hash_name`  | string | ✅   | Steam 市场哈希名称，如 `AK-47 \| Redline (Field-Tested)` |
+
+**查询参数:**
+
+| 参数            | 类型    | 必填 | 默认值 | 可选值                                       | 说明         |
+| --------------- | ------- | ---- | ------ | -------------------------------------------- | ------------ |
+| `type`          | integer | ❌   | `2`    | `1` `2` `3`                                  | K线类型：1=时K，2=日K，3=周K |
+| `platform`      | string  | ❌   | `ALL`  | `ALL` `BUFF` `YOUPIN` `C5` `STEAM` `HALOSKINS` | 平台过滤     |
+| `special_style` | string  | ❌   | —      | —                                            | 特殊款式过滤 |
+
+**请求示例:**
+
+```bash
+# 日K线，BUFF 平台
+GET /api/kline/AK-47%20%7C%20Redline%20(Field-Tested)?type=2&platform=BUFF
+
+# 时K线，全平台
+GET /api/kline/AK-47%20%7C%20Redline%20(Field-Tested)?type=1
+
+# 周K线，YOUPIN 平台
+GET /api/kline/M4A4%20%7C%20Buzz%20Kill%20(Factory%20New)?type=3&platform=YOUPIN
+```
+
+**PowerShell 测试:**
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/kline/AK-47%20%7C%20Redline%20(Field-Tested)?type=2&platform=BUFF" | ConvertTo-Json -Depth 3
+```
+
+**响应示例:**
+
+```json
+{
+  "success": true,
+  "data": [
+    [
+      { "timestamp": "1766505559", "open": 6966.0, "high": 7100.0, "low": 6830.0, "close": 7020.0, "volume": 1020 }
+    ]
+  ],
+  "errorCode": 0,
+  "errorMsg": "",
+  "errorData": {},
+  "errorCodeStr": ""
+}
+```
+
+**速率限制:** 每个 API Key 每分钟 120 次请求
+
+**错误响应:**
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errorCode": -1,
+  "errorMsg": "No available API key from api-manager",
+  "errorData": {},
+  "errorCodeStr": "no_api_key"
+}
+```
+
+---
+
+### 4. 饰品搜索
 
 #### `GET /api/search`
 
-模糊搜索 CS2 饰品
+模糊搜索 CS2 饰品（原第3节）
 
 **查询参数:**
 
@@ -335,6 +408,17 @@ async function searchItems(query) {
 async function getPrice(hashname) {
   const response = await fetch(
     `https://api.hezhili.online/cs2/price/${encodeURIComponent(hashname)}`,
+  );
+  const data = await response.json();
+  return data;
+}
+
+// 获取K线数据
+async function getKlineData(hashname, type = 2, platform = null) {
+  const params = new URLSearchParams({ type });
+  if (platform) params.set("platform", platform);
+  const response = await fetch(
+    `https://api.hezhili.online/cs2/kline/${encodeURIComponent(hashname)}?${params}`,
   );
   const data = await response.json();
   return data;
