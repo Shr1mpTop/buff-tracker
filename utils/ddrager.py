@@ -28,9 +28,11 @@ from utils.api_manager import request_and_allocate_key, rollback_quota_on_failur
 # API configuration
 API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/price/single"
 BATCH_API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/price/batch"
+BASE_API_ENDPOINT = "https://open.steamdt.com/open/cs2/v1/base"
 HISTORY_API_ENDPOINT = "https://api.steamdt.com/user/steam/type-trend/v2/item/details"
 ENDPOINT_NAME = "price_single"
 BATCH_ENDPOINT_NAME = "price_batch"
+BASE_ENDPOINT_NAME = "base"
 
 
 def request_api_key() -> str:
@@ -71,6 +73,69 @@ def rollback_batch_api_usage(api_key: str):
         api_key: The API key that was used
     """
     rollback_quota_on_failure(api_key, BATCH_ENDPOINT_NAME)
+
+
+def request_base_api_key() -> str:
+    """
+    Request best available API key from api-manager for base endpoint
+    
+    Returns:
+        str: API key or None if no available keys
+    """
+    return request_and_allocate_key(BASE_ENDPOINT_NAME)
+
+
+def rollback_base_api_usage(api_key: str):
+    """
+    Notify api-manager about a failed base API call to rollback quota
+    
+    Args:
+        api_key: The API key that was used
+    """
+    rollback_quota_on_failure(api_key, BASE_ENDPOINT_NAME)
+
+
+def fetch_base_info() -> dict:
+    """
+    Fetch base info for all CS2 items
+    
+    Returns:
+        dict: API response data or error
+    """
+    api_key = request_base_api_key()
+    
+    if not api_key:
+        return {
+            "error": "no_api_key",
+            "message": "No available API key from api-manager"
+        }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.get(
+            BASE_API_ENDPOINT,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            rollback_base_api_usage(api_key)
+            
+        return response.json()
+        
+    except requests.RequestException as e:
+        rollback_base_api_usage(api_key)
+        return {
+            "error": "request_failed",
+            "message": str(e)
+        }
+    except Exception as e:
+        rollback_base_api_usage(api_key)
+        return {"error": "unexpected", "message": str(e)}
 
 
 def fetch_price(hashname: str) -> dict:
